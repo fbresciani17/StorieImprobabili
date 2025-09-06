@@ -10,9 +10,17 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { getAllStories, removeStory } from '../storage/stories';
+import {
+  getAllStories,
+  removeStory,
+  exportStoriesToFile,
+  importStoriesFromFile,
+} from '../storage/stories';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
 
 function formatDate(iso) {
   try {
@@ -37,34 +45,21 @@ export default function StoriesScreen({ navigation }) {
   const [selected, setSelected] = useState(null); // {id,title,body,createdAt,...} | null
   const [modalVisible, setModalVisible] = useState(false);
 
-  const openDetail = (story) => {
-    setSelected(story);
-    setModalVisible(true);
-  };
-  const closeDetail = () => {
-    setModalVisible(false);
-    setSelected(null);
-  };
+  const openDetail = (story) => { setSelected(story); setModalVisible(true); };
+  const closeDetail = () => { setModalVisible(false); setSelected(null); };
 
-  // Ricarica la lista quando la tab diventa visibile
   const load = useCallback(async () => {
     const list = await getAllStories();
     setStories(list);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function doDelete(storyId) {
-    const next = await removeStory(storyId);
+    const next = stories.filter((s) => s.id !== storyId);
     setStories(next);
-    // se stavo guardando il dettaglio di quella storia, chiudi il modale
-    if (selected && selected.id === storyId) {
-      closeDetail();
-    }
+    try { await removeStory(storyId); } catch {}
+    if (selected && selected.id === storyId) closeDetail();
   }
 
   function confirmDelete(storyId) {
@@ -78,13 +73,89 @@ export default function StoriesScreen({ navigation }) {
     );
   }
 
-  function editFromList(story) {
-    navigation.navigate('Editor', { story });
+  function editFromList(story) { navigation.navigate('Editor', { story }); }
+  function editFromModal() { if (!selected) return; navigation.navigate('Editor', { story: selected }); closeDetail(); }
+
+  // --- EXPORT su file + share ---
+  async function handleExportFile() {
+    try {
+      const { uri, filename, count } = await exportStoriesToFile(true);
+      if (!uri || !count) {
+        Alert.alert('Nulla da esportare', 'Non ci sono storie salvate.');
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Esporta storie (JSON)',
+          UTI: 'public.json',
+        });
+      } else {
+        Alert.alert('File creato', `File salvato come:\n${filename}`);
+      }
+    } catch (e) {
+      console.warn(e);
+      Alert.alert('Errore', 'Impossibile esportare in questo momento.');
+    }
   }
-  function editFromModal() {
+
+  // --- IMPORT da file ---
+  async function handleImportFile() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/json', 'application/*+json'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      let pickedUri = null;
+
+      if ('canceled' in res) {
+        if (res.canceled) return;
+        pickedUri = res.assets?.[0]?.uri || null;
+      } else {
+        if (res.type === 'cancel') return;
+        pickedUri = res.uri || null;
+      }
+
+      if (!pickedUri) {
+        Alert.alert('Import annullato', 'Nessun file selezionato.');
+        return;
+      }
+
+      const stats = await importStoriesFromFile(pickedUri);
+
+      if (!stats || stats.error) {
+        const message = stats?.error || 'Import non riuscito.';
+        Alert.alert('Errore import', message);
+        return;
+      }
+
+      await load();
+      Alert.alert(
+        'Import completato ✅',
+        `Letti: ${stats.imported}\nAggiunti: ${stats.added}\nAggiornati: ${stats.updated}\nSaltati: ${stats.skipped}\nNon validi: ${stats.invalid}`
+      );
+    } catch (e) {
+      console.warn(e);
+      Alert.alert('Errore', 'Import non riuscito. Assicurati che il file sia un JSON valido.');
+    }
+  }
+
+  // --- COPIA titolo+testo dal modale ---
+  async function handleCopySelected() {
     if (!selected) return;
-    navigation.navigate('Editor', { story: selected });
-    closeDetail();
+    try {
+      const title = (selected.title || '').trim();
+      const body = (selected.body || '').trim();
+      const combined = title ? `${title}\n\n${body}` : body;
+      await Clipboard.setStringAsync(combined);
+      Alert.alert('Copiato 📋', 'Titolo e testo copiati negli appunti.');
+    } catch (e) {
+      console.warn(e);
+      Alert.alert('Errore', 'Impossibile copiare al momento.');
+    }
   }
 
   const renderItem = ({ item }) => (
@@ -124,7 +195,35 @@ export default function StoriesScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.header, { color: colors.text }]}>Le tue storie 📚</Text>
+      <View style={styles.headerRow}>
+        <Text style={[styles.header, { color: colors.text }]}>Le tue storie 📚</Text>
+
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={handleImportFile}
+            style={[styles.actionBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Importa da file"
+          >
+            <Ionicons name="cloud-upload" size={16} color={colors.textOnSecondary || colors.text} />
+            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>
+              Importa
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleExportFile}
+            style={[styles.actionBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Esporta su file"
+          >
+            <Ionicons name="download" size={16} color={colors.textOnSecondary || colors.text} />
+            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>
+              Esporta
+            </Text>
+          </Pressable>
+        </View>
+      </View>
 
       {stories.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -137,7 +236,8 @@ export default function StoriesScreen({ navigation }) {
           data={stories}
           keyExtractor={(it) => it.id}
           renderItem={renderItem}
-          contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
 
@@ -156,18 +256,31 @@ export default function StoriesScreen({ navigation }) {
             )}
 
             <View style={styles.modalActions}>
-              <Pressable onPress={editFromModal} style={[styles.btnGhost, { borderColor: colors.border }]}>
+              <Pressable
+                onPress={handleCopySelected}
+                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.btnGhostText, { color: colors.text }]}>Copia titolo+testo 📋</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={editFromModal}
+                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
+              >
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Modifica ✏️</Text>
               </Pressable>
 
               <Pressable
                 onPress={() => selected && confirmDelete(selected.id)}
-                style={[styles.btnGhost, { borderColor: colors.border }]}
+                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
               >
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Elimina 🗑️</Text>
               </Pressable>
 
-              <Pressable onPress={closeDetail} style={[styles.btn, { backgroundColor: colors.primary }]}>
+              <Pressable
+                onPress={closeDetail}
+                style={[styles.btn, styles.btnAction, { backgroundColor: colors.primary }]}
+              >
                 <Text style={[styles.btnText, { color: colors.textOnButton }]}>Chiudi</Text>
               </Pressable>
             </View>
@@ -181,7 +294,10 @@ export default function StoriesScreen({ navigation }) {
 const styles = StyleSheet.create({
   // lista
   container: { flex: 1, padding: 16 },
-  header: { fontSize: 22, fontWeight: '800', marginBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  header: { fontSize: 22, fontWeight: '800' },
+  headerActions: { flexDirection: 'row', gap: 8 },
+
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { fontSize: 15, opacity: 0.8, textAlign: 'center' },
 
@@ -195,15 +311,22 @@ const styles = StyleSheet.create({
 
   // modale
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 16, justifyContent: 'center' },
-  modalCard: { borderWidth: 1, borderRadius: 18, padding: 14, maxHeight: '80%' },
+  modalCard: { borderWidth: 1, borderRadius: 18, padding: 14, maxHeight: '80%', width: '100%', alignSelf: 'center' },
   modalHeader: { marginBottom: 6 },
   modalTitle: { fontSize: 18, fontWeight: '800' },
   modalDate: { fontSize: 12, opacity: 0.7, marginBottom: 10 },
   modalBody: { fontSize: 15, lineHeight: 22 },
 
-  modalActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end', marginTop: 12 },
+  // azioni nel modale: WRAP per andare a capo su schermi stretti
+  modalActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
 
   // bottoni
+  btnAction: { marginLeft: 8, marginTop: 8 },
   btn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12 },
   btnText: { fontSize: 16, fontWeight: '700' },
   btnGhost: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1 },
