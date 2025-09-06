@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import KawaiiDice from '../components/KawaiiDice';
 import { seeds } from '../data/seeds';
+import { Ionicons } from '@expo/vector-icons';
 
 const ORDER = [
   { key: 'characters', icon: '👤', label: 'Personaggi' },
@@ -20,38 +20,90 @@ function randomPick(arr) {
 export default function GeneratorScreen({ navigation }) {
   const { colors } = useTheme();
 
-  // Stato iniziale: tutte le categorie vuote
+  // Stato: per ogni categoria -> { value: string, locked: boolean }
   const initial = useMemo(() => {
     const s = {};
-    ORDER.forEach(({ key }) => { s[key] = ''; });
+    ORDER.forEach(({ key }) => { s[key] = { value: '', locked: false }; });
     return s;
   }, []);
 
-  const [result, setResult] = useState(initial);
+  const [state, setState] = useState(initial);
 
+  // Quante categorie mostrare (min 2, max 6)
+  const [count, setCount] = useState(6);
+  const visibleOrder = useMemo(() => ORDER.slice(0, count), [count]);
+
+  // Rigenera tutte le categorie NON bloccate (solo quelle visibili)
   function rollAll() {
-    setResult((prev) => {
+    setState((prev) => {
       const next = { ...prev };
-      ORDER.forEach(({ key }) => {
-        next[key] = randomPick(seeds[key]);
+      visibleOrder.forEach(({ key }) => {
+        if (!prev[key].locked) {
+          next[key] = { ...prev[key], value: randomPick(seeds[key]) };
+        }
       });
       return next;
     });
   }
 
+  // Rigenera una singola categoria se NON bloccata
+  function rerollOne(key) {
+    setState((prev) => {
+      if (prev[key].locked) return prev;
+      return { ...prev, [key]: { ...prev[key], value: randomPick(seeds[key]) } };
+    });
+  }
+
+  // Pulisci: valori vuoti, sblocca tutto
   function clearAll() {
-    setResult(initial);
+    setState(initial);
+  }
+
+  // Lock/sblocco di una riga
+  function toggleLock(key) {
+    setState((prev) => ({ ...prev, [key]: { ...prev[key], locked: !prev[key].locked } }));
+  }
+
+  // Sblocca tutto
+  function unlockAll() {
+    setState((prev) => {
+      const next = { ...prev };
+      ORDER.forEach(({ key }) => { next[key] = { ...prev[key], locked: false }; });
+      return next;
+    });
   }
 
   const renderItem = ({ item }) => {
-    const value = result[item.key] || '—';
+    const { key, icon, label } = item;
+    const { value, locked } = state[key];
+
     return (
       <View style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.icon, { color: colors.text }]}>{item.icon}</Text>
-        <View style={styles.content}>
-          <Text style={[styles.label, { color: colors.text }]}>{item.label}</Text>
-          <Text style={[styles.value, { color: colors.text }]}>{value}</Text>
-        </View>
+        <Text style={[styles.icon, { color: colors.text }]}>{icon}</Text>
+
+        <Pressable
+          style={styles.content}
+          onPress={() => rerollOne(key)}
+          android_ripple={{ color: '#00000010' }}
+        >
+          <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{value || '—'}</Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => toggleLock(key)}
+          style={[
+            styles.lockBtn,
+            { backgroundColor: locked ? colors.primary : colors.accent }
+          ]}
+        >
+          <Ionicons
+            name={locked ? 'lock-closed' : 'lock-open'}
+            size={18}
+            color={locked ? '#FFFFFF' : colors.text}
+          />
+        </Pressable>
       </View>
     );
   };
@@ -63,13 +115,34 @@ export default function GeneratorScreen({ navigation }) {
         <Text style={[styles.subtitle, { color: colors.text }]}>Generatore di elementi narrativi</Text>
       </View>
 
-      <View style={styles.center}>
-        <KawaiiDice />
+      {/* Selettore numero elementi (2..6) */}
+      <View style={styles.selector}>
+        <Text style={[styles.selectorLabel, { color: colors.text }]}>Quanti elementi?</Text>
+        <View style={styles.chips}>
+          {[2, 3, 4, 5, 6].map((n) => (
+            <Pressable
+              key={n}
+              onPress={() => setCount(n)}
+              style={[
+                styles.chip,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: n === count ? colors.accent : 'transparent',
+                },
+              ]}
+            >
+              <Text style={[styles.chipText, { color: colors.text }]}>{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.selectorHint, { color: colors.text }]}>
+          Minimo 2 (Personaggi, Luoghi) • Massimo 6
+        </Text>
       </View>
 
       <FlatList
-        data={ORDER}
-        keyExtractor={(item) => item.key}
+        data={visibleOrder}
+        keyExtractor={(it) => it.key}
         renderItem={renderItem}
         contentContainerStyle={{ gap: 12, paddingVertical: 8 }}
       />
@@ -81,6 +154,10 @@ export default function GeneratorScreen({ navigation }) {
 
         <Pressable onPress={clearAll} style={[styles.btnGhost, { borderColor: colors.border }]}>
           <Text style={[styles.btnGhostText, { color: colors.text }]}>Pulisci ✨</Text>
+        </Pressable>
+
+        <Pressable onPress={unlockAll} style={[styles.btnGhost, { borderColor: colors.border }]}>
+          <Text style={[styles.btnGhostText, { color: colors.text }]}>Sblocca tutto 🔓</Text>
         </Pressable>
 
         <Pressable onPress={() => navigation.navigate('Editor')} style={[styles.btn, { backgroundColor: colors.secondary }]}>
@@ -96,7 +173,12 @@ const styles = StyleSheet.create({
   header: { marginBottom: 8 },
   title: { fontSize: 22, fontWeight: '800', marginBottom: 6 },
   subtitle: { fontSize: 14, opacity: 0.8 },
-  center: { alignItems: 'center', marginBottom: 12 },
+  selector: { marginTop: 4, marginBottom: 8 },
+  selectorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+  chips: { flexDirection: 'row', gap: 8 },
+  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1 },
+  chipText: { fontSize: 14, fontWeight: '700' },
+  selectorHint: { fontSize: 12, opacity: 0.7, marginTop: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -110,12 +192,14 @@ const styles = StyleSheet.create({
   value: { fontSize: 16, fontWeight: '700', marginTop: 4 },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     justifyContent: 'space-between',
     paddingTop: 8,
   },
   btn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '48%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
@@ -123,10 +207,18 @@ const styles = StyleSheet.create({
   },
   btnText: { fontSize: 16, fontWeight: '700' },
   btnGhost: {
+    flexGrow: 1,
+    flexBasis: '48%',
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 14,
     borderWidth: 1,
   },
   btnGhostText: { fontSize: 16, fontWeight: '600' },
+  lockBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
 });
