@@ -25,10 +25,20 @@ export async function addStory({ title, body }) {
   const list = await getAllStories();
   const now = new Date().toISOString();
   const story = { id: genId(), title, body, createdAt: now, updatedAt: now };
-  // ultimo salvato in cima
-  list.unshift(story);
+  list.unshift(story); // più recente in cima
   await saveAll(list);
   return story;
+}
+
+export async function updateStory(id, { title, body }) {
+  const list = await getAllStories();
+  const idx = list.findIndex((s) => s.id === id);
+  if (idx === -1) throw new Error('Story not found: ' + id);
+  const now = new Date().toISOString();
+  const updated = { ...list[idx], title, body, updatedAt: now };
+  list[idx] = updated;
+  await saveAll(list);
+  return updated;
 }
 
 export async function removeStory(id) {
