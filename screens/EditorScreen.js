@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory } from '../storage/stories';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { PageScroll } from '../components/Page';
+import { ts } from '../theme/typography';
 
 export default function EditorScreen() {
   const { mode, colors } = useTheme();
@@ -22,45 +23,154 @@ export default function EditorScreen() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
 
+  // Snapshot per determinare le modifiche non salvate
+  const initialRef = useRef({ title: '', body: '' });
+
+  // Flag: pulire i campi al prossimo focus dell’Editor?
+  const clearOnNextFocusRef = useRef(false);
+
+  // Carica eventuale storia da modificare e azzera "dirty"
   useEffect(() => {
-    if (editingStory) {
-      setTitle(editingStory.title || '');
-      setBody(editingStory.body || '');
-    }
+    const ti = editingStory?.title ?? '';
+    const bo = editingStory?.body ?? '';
+    setTitle(ti);
+    setBody(bo);
+    initialRef.current = { title: ti, body: bo };
   }, [editingStory?.id]);
 
   const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
 
-  async function handleSave() {
+  // "dirty" = differente dallo snapshot
+  const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
+
+  // Salvataggio
+  async function saveNow({ silent = false } = {}) {
     const t = title.trim();
     const b = body.trim();
     if (!t || !b) {
-      Alert.alert('Ops', 'Aggiungi almeno titolo e testo prima di salvare.');
-      return;
+      if (!silent) Alert.alert('Ops', 'Aggiungi almeno titolo e testo prima di salvare.');
+      return false;
     }
     try {
       if (editingStory) {
         await updateStory(editingStory.id, { title: t, body: b });
-        Alert.alert('Aggiornata ✨', 'La tua storia è stata aggiornata.');
+        if (!silent) Alert.alert('Aggiornata ✨', 'La tua storia è stata aggiornata.');
       } else {
         await addStory({ title: t, body: b });
-        Alert.alert('Salvata! 💖', 'La tua storia è stata salvata in locale.');
+        if (!silent) Alert.alert('Salvata! 💖', 'La tua storia è stata salvata in locale.');
       }
-      setTitle('');
-      setBody('');
-      navigation.setParams({ story: undefined });
+      // Aggiorno lo snapshot per non risultare più dirty
+      initialRef.current = { title: t, body: b };
+      return true;
     } catch (e) {
       console.warn(e);
-      Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
+      if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
+      else Alert.alert('Errore', 'Salvataggio non riuscito.');
+      return false;
+    }
+  }
+
+  async function handleSave() {
+    const ok = await saveNow({ silent: false });
+    if (ok) {
+      // dopo salvataggio manuale restiamo su editor, non puliamo subito
     }
   }
 
   function handleNew() {
-    if (!title && !body && !editingStory) return;
-    setTitle('');
-    setBody('');
-    navigation.setParams({ story: undefined });
+    if (!dirty) {
+      setTitle('');
+      setBody('');
+      navigation.setParams({ story: undefined });
+      initialRef.current = { title: '', body: '' };
+      return;
+    }
+    Alert.alert(
+      'Nuova bozza 🌸',
+      'Ci sono modifiche non salvate. Vuoi salvarle prima di creare una nuova bozza?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Esci senza salvare',
+          style: 'destructive',
+          onPress: () => {
+            setTitle('');
+            setBody('');
+            navigation.setParams({ story: undefined });
+            initialRef.current = { title: '', body: '' };
+          },
+        },
+        {
+          text: 'Salva e continua',
+          onPress: async () => {
+            const ok = await saveNow({ silent: true });
+            if (ok) {
+              setTitle('');
+              setBody('');
+              navigation.setParams({ story: undefined });
+              initialRef.current = { title: '', body: '' };
+            }
+          },
+        },
+      ]
+    );
   }
+
+  // Alert quando lasci l'Editor (cambio tab/blur)
+  useEffect(() => {
+    const unsub = navigation.addListener('blur', () => {
+      if (!dirty) return;
+      const parent = navigation.getParent?.();
+
+      Alert.alert(
+        'Uscire senza salvare?',
+        'Hai modifiche non salvate. Vuoi salvarle prima di uscire?',
+        [
+          {
+            text: 'Torna all’Editor',
+            style: 'cancel',
+            onPress: () => {
+              // Non pulire al prossimo focus: stai rientrando per continuare
+              clearOnNextFocusRef.current = false;
+              parent?.navigate('Editor');
+            },
+          },
+          {
+            text: 'Esci senza salvare',
+            style: 'destructive',
+            onPress: () => {
+              // Pulire i campi quando si tornerà all’Editor
+              clearOnNextFocusRef.current = true;
+            },
+          },
+          {
+            text: 'Salva e continua',
+            onPress: async () => {
+              const ok = await saveNow({ silent: true });
+              // In ogni caso, al ritorno vogliamo un Editor vuoto
+              clearOnNextFocusRef.current = true;
+            },
+          },
+        ]
+      );
+    });
+
+    return unsub;
+  }, [navigation, dirty, title, body]);
+
+  // Quando l'Editor torna in focus, pulisci se richiesto e se non stai aprendo per modificare una storia
+  useFocusEffect(
+    React.useCallback(() => {
+      if (clearOnNextFocusRef.current && !route.params?.story) {
+        setTitle('');
+        setBody('');
+        navigation.setParams({ story: undefined });
+        initialRef.current = { title: '', body: '' };
+        clearOnNextFocusRef.current = false;
+      }
+      return () => {};
+    }, [route.params?.story])
+  );
 
   return (
     <PageScroll>
@@ -115,12 +225,12 @@ export default function EditorScreen() {
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  title: { fontSize: 22, fontWeight: '800' },
+  title: { fontSize: ts(22), fontWeight: '800' },
   badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999 },
-  badgeText: { fontSize: 12, fontWeight: '700' },
+  badgeText: { fontSize: ts(12), fontWeight: '700' },
 
   card: { borderWidth: 1, borderRadius: 16, padding: 12 },
-  label: { fontSize: 13, opacity: 0.9, marginBottom: 6 },
+  label: { fontSize: ts(13), opacity: 0.9, marginBottom: 6 },
   input: {
     backgroundColor: 'transparent',
     borderWidth: 1,
@@ -128,7 +238,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 16,
+    fontSize: ts(16),
   },
   textarea: {
     backgroundColor: 'transparent',
@@ -138,12 +248,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     minHeight: 200,
-    fontSize: 16,
+    fontSize: ts(16),
   },
 
   actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 12 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14 },
-  btnText: { fontSize: 16, fontWeight: '700' },
+  btnText: { fontSize: ts(16), fontWeight: '700' },
   btnGhost: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1 },
-  btnGhostText: { fontSize: 16, fontWeight: '600' },
+  btnGhostText: { fontSize: ts(16), fontWeight: '600' },
 });
