@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
+import { Page } from '../components/Page';
 
 function formatDate(iso) {
   try {
@@ -194,7 +195,7 @@ export default function StoriesScreen({ navigation }) {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <Page>
       <View style={styles.headerRow}>
         <Text style={[styles.header, { color: colors.text }]}>Le tue storie 📚</Text>
 
@@ -206,9 +207,7 @@ export default function StoriesScreen({ navigation }) {
             accessibilityLabel="Importa da file"
           >
             <Ionicons name="cloud-upload" size={16} color={colors.textOnSecondary || colors.text} />
-            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>
-              Importa
-            </Text>
+            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>Importa</Text>
           </Pressable>
 
           <Pressable
@@ -218,9 +217,7 @@ export default function StoriesScreen({ navigation }) {
             accessibilityLabel="Esporta su file"
           >
             <Ionicons name="download" size={16} color={colors.textOnSecondary || colors.text} />
-            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>
-              Esporta
-            </Text>
+            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>Esporta</Text>
           </Pressable>
         </View>
       </View>
@@ -256,44 +253,31 @@ export default function StoriesScreen({ navigation }) {
             )}
 
             <View style={styles.modalActions}>
-              <Pressable
-                onPress={handleCopySelected}
-                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
-              >
+              <Pressable onPress={handleCopySelected} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Copia titolo+testo 📋</Text>
               </Pressable>
 
-              <Pressable
-                onPress={editFromModal}
-                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
-              >
+              <Pressable onPress={editFromModal} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Modifica ✏️</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => selected && confirmDelete(selected.id)}
-                style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}
-              >
+              <Pressable onPress={() => selected && confirmDelete(selected.id)} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Elimina 🗑️</Text>
               </Pressable>
 
-              <Pressable
-                onPress={closeDetail}
-                style={[styles.btn, styles.btnAction, { backgroundColor: colors.primary }]}
-              >
+              <Pressable onPress={closeDetail} style={[styles.btn, styles.btnAction, { backgroundColor: colors.primary }]}>
                 <Text style={[styles.btnText, { color: colors.textOnButton }]}>Chiudi</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  // lista
-  container: { flex: 1, padding: 16 },
+  // header/lista
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   header: { fontSize: 22, fontWeight: '800' },
   headerActions: { flexDirection: 'row', gap: 8 },
@@ -317,16 +301,11 @@ const styles = StyleSheet.create({
   modalDate: { fontSize: 12, opacity: 0.7, marginBottom: 10 },
   modalBody: { fontSize: 15, lineHeight: 22 },
 
-  // azioni nel modale: WRAP per andare a capo su schermi stretti
-  modalActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    marginTop: 12,
-  },
+  // azioni nel modale
+  modalActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 12 },
+  btnAction: { marginLeft: 8, marginTop: 8 },
 
   // bottoni
-  btnAction: { marginLeft: 8, marginTop: 8 },
   btn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12 },
   btnText: { fontSize: 16, fontWeight: '700' },
   btnGhost: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1 },
