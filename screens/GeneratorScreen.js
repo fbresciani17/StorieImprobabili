@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { seeds } from '../data/seeds';
+import { elements } from '../data/elements_it';
 import { Ionicons } from '@expo/vector-icons';
 
 const ORDER = [
@@ -39,7 +39,7 @@ export default function GeneratorScreen({ navigation }) {
       const next = { ...prev };
       visibleOrder.forEach(({ key }) => {
         if (!prev[key].locked) {
-          next[key] = { ...prev[key], value: randomPick(seeds[key]) };
+          next[key] = { ...prev[key], value: randomPick(elements[key]) };
         }
       });
       return next;
@@ -50,7 +50,7 @@ export default function GeneratorScreen({ navigation }) {
   function rerollOne(key) {
     setState((prev) => {
       if (prev[key].locked) return prev;
-      return { ...prev, [key]: { ...prev[key], value: randomPick(seeds[key]) } };
+      return { ...prev, [key]: { ...prev[key], value: randomPick(elements[key]) } };
     });
   }
 
