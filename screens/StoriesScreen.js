@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import UsedElementsPanel from '../components/UsedElements';
 import {
   getAllStories,
   removeStory,
@@ -41,8 +42,6 @@ function formatDate(iso) {
 export default function StoriesScreen({ navigation }) {
   const { colors } = useTheme();
   const [stories, setStories] = useState([]);
-
-  // Modale di dettaglio
   const [selected, setSelected] = useState(null); // {id,title,body,createdAt,...} | null
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -74,23 +73,18 @@ export default function StoriesScreen({ navigation }) {
     );
   }
 
-  function editFromList(story) { navigation.navigate('Editor', { story }); }
-  function editFromModal() { if (!selected) return; navigation.navigate('Editor', { story: selected }); closeDetail(); }
+  async function editFromList(story) {
+    closeDetail();
+    navigation.navigate('Editor', { story });
+  }
 
-  // --- EXPORT su file + share ---
   async function handleExportFile() {
     try {
-      const { uri, filename, count } = await exportStoriesToFile(true);
-      if (!uri || !count) {
-        Alert.alert('Nulla da esportare', 'Non ci sono storie salvate.');
-        return;
-      }
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, {
+      const filename = await exportStoriesToFile();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(filename, {
           mimeType: 'application/json',
-          dialogTitle: 'Esporta storie (JSON)',
-          UTI: 'public.json',
+          dialogTitle: 'Esporta storie',
         });
       } else {
         Alert.alert('File creato', `File salvato come:\n${filename}`);
@@ -120,31 +114,17 @@ export default function StoriesScreen({ navigation }) {
         pickedUri = res.uri || null;
       }
 
-      if (!pickedUri) {
-        Alert.alert('Import annullato', 'Nessun file selezionato.');
-        return;
-      }
+      if (!pickedUri) return;
 
-      const stats = await importStoriesFromFile(pickedUri);
-
-      if (!stats || stats.error) {
-        const message = stats?.error || 'Import non riuscito.';
-        Alert.alert('Errore import', message);
-        return;
-      }
-
+      const count = await importStoriesFromFile(pickedUri);
       await load();
-      Alert.alert(
-        'Import completato ✅',
-        `Letti: ${stats.imported}\nAggiunti: ${stats.added}\nAggiornati: ${stats.updated}\nSaltati: ${stats.skipped}\nNon validi: ${stats.invalid}`
-      );
+      Alert.alert('Import riuscito', `Importate ${count} storie.`);
     } catch (e) {
       console.warn(e);
-      Alert.alert('Errore', 'Import non riuscito. Assicurati che il file sia un JSON valido.');
+      Alert.alert('Errore', 'Impossibile importare in questo momento.');
     }
   }
 
-  // --- COPIA titolo+testo dal modale ---
   async function handleCopySelected() {
     if (!selected) return;
     try {
@@ -175,22 +155,21 @@ export default function StoriesScreen({ navigation }) {
           accessibilityRole="button"
           accessibilityLabel="Modifica storia"
         >
-          <Ionicons name="create" size={16} color={colors.text} />
+          <Ionicons name="create-outline" size={16} color={colors.text} />
         </Pressable>
 
         <Pressable
           onPress={() => confirmDelete(item.id)}
-          style={[styles.iconBtn, { backgroundColor: colors.accent }]}
+          style={[styles.iconBtn, { backgroundColor: colors.accent2 || colors.accent }]}
           accessibilityRole="button"
           accessibilityLabel="Elimina storia"
         >
-          <Ionicons name="trash" size={16} color={colors.text} />
+          <Ionicons name="trash-outline" size={16} color={colors.text} />
         </Pressable>
       </View>
+
       <Text style={[styles.date, { color: colors.text }]}>{formatDate(item.createdAt)}</Text>
-      <Text style={[styles.body, { color: colors.text }]} numberOfLines={2}>
-        {item.body}
-      </Text>
+      <Text style={[styles.body, { color: colors.text }]} numberOfLines={3}>{item.body}</Text>
     </Pressable>
   );
 
@@ -225,7 +204,7 @@ export default function StoriesScreen({ navigation }) {
       {stories.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={[styles.empty, { color: colors.text }]}>
-            Nessuna storia ancora. Salva una bozza dall'Editor 💖
+            Nessuna storia salvata. Crea una bozza dall’Editor o genera ispirazioni dal Generatore.
           </Text>
         </View>
       ) : (
@@ -249,6 +228,9 @@ export default function StoriesScreen({ navigation }) {
                 </View>
                 <Text style={[styles.modalDate, { color: colors.text }]}>{formatDate(selected.createdAt)}</Text>
                 <Text style={[styles.modalBody, { color: colors.text }]}>{selected.body}</Text>
+
+                {/* Elementi usati (sola lettura) nel dettaglio storia */}
+                <UsedElementsPanel compact />
               </ScrollView>
             )}
 
@@ -257,16 +239,16 @@ export default function StoriesScreen({ navigation }) {
                 <Text style={[styles.btnGhostText, { color: colors.text }]}>Copia titolo+testo 📋</Text>
               </Pressable>
 
-              <Pressable onPress={editFromModal} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
-                <Text style={[styles.btnGhostText, { color: colors.text }]}>Modifica ✏️</Text>
+              <Pressable onPress={() => editFromList(selected)} style={[styles.btnAction, { backgroundColor: colors.primary }]}>
+                <Text style={{ color: colors.textOnButton, fontWeight: '700' }}>Modifica ✏️</Text>
               </Pressable>
 
-              <Pressable onPress={() => selected && confirmDelete(selected.id)} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
-                <Text style={[styles.btnGhostText, { color: colors.text }]}>Elimina 🗑️</Text>
+              <Pressable onPress={() => confirmDelete(selected.id)} style={[styles.btnAction, { backgroundColor: colors.accent2 || colors.accent }]}>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>Elimina 🗑️</Text>
               </Pressable>
 
-              <Pressable onPress={closeDetail} style={[styles.btn, styles.btnAction, { backgroundColor: colors.primary }]}>
-                <Text style={[styles.btnText, { color: colors.textOnButton }]}>Chiudi</Text>
+              <Pressable onPress={closeDetail} style={[styles.btnAction, { backgroundColor: colors.secondary }]}>
+                <Text style={{ color: colors.textOnSecondary || colors.text, fontWeight: '700' }}>Chiudi</Text>
               </Pressable>
             </View>
           </View>
@@ -291,23 +273,22 @@ const styles = StyleSheet.create({
   date: { fontSize: 12, opacity: 0.7, marginTop: 2, marginBottom: 6 },
   body: { fontSize: 14, opacity: 0.9 },
 
-  iconBtn: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10 },
+  iconBtn: { padding: 8, borderRadius: 10 },
 
-  // modale
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 16, justifyContent: 'center' },
-  modalCard: { borderWidth: 1, borderRadius: 18, padding: 14, maxHeight: '80%', width: '100%', alignSelf: 'center' },
-  modalHeader: { marginBottom: 6 },
+  // modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', padding: 16, justifyContent: 'center' },
+  modalCard: { borderWidth: 1, borderRadius: 16, padding: 12, maxHeight: '88%' },
+  modalHeader: { marginBottom: 4 },
   modalTitle: { fontSize: 18, fontWeight: '800' },
-  modalDate: { fontSize: 12, opacity: 0.7, marginBottom: 10 },
+  modalDate: { fontSize: 12, opacity: 0.7, marginBottom: 8 },
   modalBody: { fontSize: 15, lineHeight: 22 },
 
-  // azioni nel modale
-  modalActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 12 },
-  btnAction: { marginLeft: 8, marginTop: 8 },
+  modalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  btnAction: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12 },
+  btnGhost: { borderWidth: 1 },
+  btnGhostText: { fontWeight: '700' },
 
-  // bottoni
-  btn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12 },
-  btnText: { fontSize: 16, fontWeight: '700' },
-  btnGhost: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1 },
-  btnGhostText: { fontSize: 16, fontWeight: '600' },
+  // azioni lista
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
+  actionText: { fontWeight: '700' },
 });

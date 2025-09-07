@@ -53,35 +53,29 @@ export default function EditorScreen() {
   const scrollRef = useRef(null);
   const bodyBlockYRef = useRef(0);
 
-  // --- NUOVO: se si entra in modifica ma la storia non ha id (legacy), prova a ri-associare l'id ---
+  // Reattach ID legacy (se entri con storia senza id)
   useEffect(() => {
     let cancelled = false;
     async function reattachIdIfMissing() {
       if (!editingStory) return;
-      if (editingStory.id) return; // già ok
+      if (editingStory.id) return;
       const t = (editingStory.title || '').trim();
       const b = (editingStory.body || '').trim();
       if (!t && !b) return;
 
       try {
         const all = await getAllStories();
-        // trova la prima storia con stesso titolo e testo
         const found = all.find(s => String(s.title || '') === t && String(s.body || '') === b);
         if (found && !cancelled) {
-          // aggiorna i params dell'Editor con la storia che ha id
           navigation.setParams({ story: found });
         }
-      } catch (e) {
-        // silenzioso: in caso di errore lascio com'è, ma l'update farà comunque fallback sicuro
-        console.warn('ReattachId error:', e);
-      }
+      } catch {}
     }
     reattachIdIfMissing();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingStory && editingStory.title, editingStory && editingStory.body]);
 
-  // Carica eventuale storia in modifica (o reset per nuova)
+  // Carica dati storia in modifica
   useEffect(() => {
     const ti = editingStory && editingStory.title ? editingStory.title : '';
     const bo = editingStory && editingStory.body ? editingStory.body : '';
@@ -93,7 +87,7 @@ export default function EditorScreen() {
   const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
   const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
 
-  // RESET AUTOMATICO: quando l'Editor torna in focus e NON stai modificando, azzera i campi
+  // Reset automatico: se l’Editor è in focus senza story param, svuota
   useFocusEffect(
     React.useCallback(() => {
       if (!(route.params && route.params.story)) {
@@ -105,7 +99,7 @@ export default function EditorScreen() {
     }, [route.params && route.params.story])
   );
 
-  // Salvataggio robusto: update → fallback rimuovendo la vecchia e salvando nuova (no duplicati)
+  // Salvataggio robusto
   async function saveNow({ silent = false } = {}) {
     const t = String(title || '').trim();
     const b = String(body  || '').trim();
@@ -123,7 +117,6 @@ export default function EditorScreen() {
         await updateStory(payload);
         if (!silent) Alert.alert('Aggiornata ✨', 'La storia è stata aggiornata.');
       } else if (isEditing && !hasId) {
-        // dopo reattachIdIfMissing è raro arrivare qui, ma gestiamo lo stesso
         await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvata come nuova', 'La storia originale non aveva un id valido, ne ho creata una nuova.');
       } else {
@@ -132,6 +125,10 @@ export default function EditorScreen() {
       }
 
       initialRef.current = { title: t, body: b };
+
+      // esci esplicitamente dalla modalità "modifica"
+      navigation.setParams({ story: undefined });
+
       return true;
 
     } catch (e) {
@@ -147,6 +144,10 @@ export default function EditorScreen() {
           );
         }
         initialRef.current = { title: t, body: b };
+
+        // anche in fallback, esci dalla modalità modifica
+        navigation.setParams({ story: undefined });
+
         return true;
       } catch (e2) {
         if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
@@ -157,7 +158,7 @@ export default function EditorScreen() {
 
   async function handleSave() {
     const ok = await saveNow({ silent: false });
-    if (ok) { /* opzionale: navigation.setParams({ story: undefined }); */ }
+    if (ok) { /* no-op */ }
   }
 
   function handleNew() {
@@ -195,34 +196,37 @@ export default function EditorScreen() {
     );
   }
 
-  // Alert quando lasci l'Editor (cambio tab/blur)
+  // Alert + pulizia params quando lasci l’Editor
   useEffect(() => {
     const unsub = navigation.addListener('blur', () => {
-      if (!dirty) return;
-      const parent = navigation.getParent && navigation.getParent();
-      Alert.alert(
-        'Uscire senza salvare?',
-        'Hai modifiche non salvate. Vuoi salvarle prima di uscire?',
-        [
-          {
-            text: 'Torna all’Editor',
-            style: 'cancel',
-            onPress: () => { try { parent && parent.navigate && parent.navigate('Editor'); } catch {} },
-          },
-          {
-            text: 'Esci senza salvare',
-            style: 'destructive',
-            onPress: () => { clearOnNextFocusRef.current = true; },
-          },
-          {
-            text: 'Salva e esci',
-            onPress: async () => {
-              const ok = await saveNow({ silent: true });
-              if (ok) clearOnNextFocusRef.current = false;
+      if (dirty) {
+        const parent = navigation.getParent && navigation.getParent();
+        Alert.alert(
+          'Uscire senza salvare?',
+          'Hai modifiche non salvate. Vuoi salvarle prima di uscire?',
+          [
+            {
+              text: 'Torna all’Editor',
+              style: 'cancel',
+              onPress: () => { try { parent && parent.navigate && parent.navigate('Editor'); } catch {} },
             },
-          },
-        ]
-      );
+            {
+              text: 'Esci senza salvare',
+              style: 'destructive',
+              onPress: () => { clearOnNextFocusRef.current = true; },
+            },
+            {
+              text: 'Salva e esci',
+              onPress: async () => {
+                const ok = await saveNow({ silent: true });
+                if (ok) clearOnNextFocusRef.current = false;
+              },
+            },
+          ]
+        );
+      }
+      // azzero i params in uscita
+      navigation.setParams({ story: undefined });
     });
     return unsub;
   }, [dirty, navigation, title, body, editingStory && editingStory.id]);
@@ -240,6 +244,7 @@ export default function EditorScreen() {
     }, [navigation, route.params && route.params.story])
   );
 
+  // --- UX tastiera/scroll ---
   const iosOffset = 0;
 
   function scrollToBodySoft() {

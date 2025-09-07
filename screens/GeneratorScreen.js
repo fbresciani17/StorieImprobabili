@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { elements } from '../data/elements_it';
 import { Ionicons } from '@expo/vector-icons';
+import { setLastElements } from '../storage/lastElements';
 
 const ORDER = [
   { key: 'characters', icon: '👤', label: 'Personaggi' },
@@ -20,7 +21,7 @@ function randomPick(arr) {
 export default function GeneratorScreen({ navigation }) {
   const { colors } = useTheme();
 
-  // Stato: per ogni categoria -> { value: string, locked: boolean }
+  // Stato iniziale: ogni categoria ha { value, locked }
   const initial = useMemo(() => {
     const s = {};
     ORDER.forEach(({ key }) => { s[key] = { value: '', locked: false }; });
@@ -42,6 +43,16 @@ export default function GeneratorScreen({ navigation }) {
           next[key] = { ...prev[key], value: randomPick(elements[key]) };
         }
       });
+
+      // Salva in AsyncStorage SOLO se ci sono almeno 2 valori pieni
+      const payload = {};
+      visibleOrder.forEach(({ key }) => {
+        if (next[key].value) payload[key] = next[key].value;
+      });
+      if (Object.keys(payload).length >= 2) {
+        setLastElements(payload).catch((e) => console.warn("Errore salvataggio lastElements:", e));
+      }
+
       return next;
     });
   }
@@ -50,7 +61,18 @@ export default function GeneratorScreen({ navigation }) {
   function rerollOne(key) {
     setState((prev) => {
       if (prev[key].locked) return prev;
-      return { ...prev, [key]: { ...prev[key], value: randomPick(elements[key]) } };
+      const updated = { ...prev, [key]: { ...prev[key], value: randomPick(elements[key]) } };
+
+      // Aggiorna anche in AsyncStorage se ≥2 categorie valorizzate
+      const payload = {};
+      ORDER.forEach(({ key }) => {
+        if (updated[key].value) payload[key] = updated[key].value;
+      });
+      if (Object.keys(payload).length >= 2) {
+        setLastElements(payload).catch((e) => console.warn("Errore salvataggio lastElements:", e));
+      }
+
+      return updated;
     });
   }
 
