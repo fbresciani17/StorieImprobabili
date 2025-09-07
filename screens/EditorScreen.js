@@ -11,6 +11,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   ScrollView,
+  BackHandler, // 👈
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory, getAllStories } from '../storage/stories';
@@ -25,7 +26,6 @@ function countWords(s) {
   const m = String(s).trim().match(/\S+/g);
   return m ? m.length : 0;
 }
-
 const ts = (n) => n;
 
 /* =========================
@@ -42,10 +42,7 @@ function useKeyboardHeight() {
       Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
       () => setKh(0)
     );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
+    return () => { show.remove(); hide.remove(); };
   }, []);
   return kh;
 }
@@ -66,37 +63,28 @@ export default function EditorScreen() {
 
   const editingStory = route?.params?.story ?? null;
 
-  /* =======================================================
-     FIX: azzera i params quando si esce dalla screen Editor
-     ======================================================= */
+  // pulizia params in uscita
   useEffect(() => {
     const unsub = navigation.addListener('blur', () => {
-      // rimuove l'ultima storia “appesa” ai params
       navigation.setParams({ story: undefined });
     });
     return unsub;
   }, [navigation]);
 
-  /* =======================================================
-     Quando si entra in Editor SENZA story -> campi vuoti
-     (reset on focus)
-     ======================================================= */
+  // reset quando entri senza story
   useFocusEffect(
     React.useCallback(() => {
       if (!route?.params?.story) {
         setTitle('');
         setBody('');
         initialRef.current = { title: '', body: '' };
-        // assicura che i params siano puliti
         navigation.setParams({ story: undefined });
       }
       return () => {};
     }, [navigation, route?.params?.story])
   );
 
-  /* =======================================================
-     Carica i dati quando c'è una story da modificare
-     ======================================================= */
+  // carica dati quando modifichi
   useEffect(() => {
     if (editingStory) {
       const ti = editingStory.title ?? '';
@@ -105,12 +93,9 @@ export default function EditorScreen() {
       setBody(bo);
       initialRef.current = { title: ti, body: bo };
     }
-    // quando editingStory torna falsy, non toccare: il reset avviene su focus
   }, [editingStory?.id]);
 
-  /* =======================================================
-     Ricollega ID se manca (fallback legacy “same title/body”)
-     ======================================================= */
+  // reattach ID se manca
   useEffect(() => {
     let cancelled = false;
     async function reattachIdIfMissing() {
@@ -118,89 +103,64 @@ export default function EditorScreen() {
       const t = (editingStory.title || '').trim();
       const b = (editingStory.body || '').trim();
       if (!t && !b) return;
-
       try {
         const all = await getAllStories();
         const found = all.find((s) => String(s.title || '') === t && String(s.body || '') === b);
-        if (found && !cancelled) {
-          navigation.setParams({ story: found });
-        }
+        if (found && !cancelled) navigation.setParams({ story: found });
       } catch {}
     }
     reattachIdIfMissing();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [editingStory?.title, editingStory?.body, navigation]);
 
-  /* =========================
-     UI helpers
-     ========================= */
   const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
   const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
   const iosOffset = 0;
 
   function scrollToBodySoft() {
     const y = Math.max(0, bodyBlockYRef.current - 12);
-    setTimeout(() => {
-      scrollRef.current?.scrollTo?.({ y, animated: true });
-    }, Platform.OS === 'ios' ? 80 : 120);
+    setTimeout(() => { scrollRef.current?.scrollTo?.({ y, animated: true }); }, Platform.OS === 'ios' ? 80 : 120);
   }
-
   function handleBodyContentSizeChange() {
     if (!bodyFocused) return;
-    setTimeout(() => {
-      scrollRef.current?.scrollTo?.({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
-    }, 50);
+    setTimeout(() => { scrollRef.current?.scrollTo?.({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true }); }, 50);
   }
 
-  /* =========================
-     Salvataggio (logica invariata)
-     ========================= */
   async function saveNow({ silent = false } = {}) {
     const t = String(title || '').trim();
     const b = String(body || '').trim();
-
     if (!t && !b) {
       if (!silent) Alert.alert('Nulla da salvare', 'Aggiungi almeno titolo o testo.');
       return false;
     }
-
     try {
       if (editingStory?.id) {
-        // update esistente
-        const ok = await updateStory(editingStory.id, { title: t, body: b });
-        if (ok) {
+        const item = await updateStory({ id: editingStory.id, title: t, body: b });
+        if (item) {
           if (!silent) Alert.alert('Salvato ✨', 'Storia aggiornata con successo.');
           initialRef.current = { title: t, body: b };
           navigation.setParams({ story: { ...editingStory, title: t, body: b } });
         }
-        return !!ok;
+        return !!item;
       } else {
-        // nuova storia
         const created = await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvato 💖', 'Storia salvata con successo.');
-        // resta in editor “vuoto” per nuova bozza
-        setTitle('');
-        setBody('');
+        setTitle(''); setBody('');
         initialRef.current = { title: '', body: '' };
         navigation.setParams({ story: undefined });
         return !!created;
       }
-    } catch (e) {
+    } catch {
       if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
       return false;
     }
   }
 
-  async function handleSave() {
-    await saveNow({ silent: false });
-  }
+  async function handleSave() { await saveNow({ silent: false }); }
 
   function handleNew() {
     if (!dirty) {
-      setTitle('');
-      setBody('');
+      setTitle(''); setBody('');
       initialRef.current = { title: '', body: '' };
       navigation.setParams({ story: undefined });
       return;
@@ -214,8 +174,7 @@ export default function EditorScreen() {
           text: 'Salva e continua',
           onPress: () =>
             saveNow({ silent: true }).then(() => {
-              setTitle('');
-              setBody('');
+              setTitle(''); setBody('');
               initialRef.current = { title: '', body: '' };
               navigation.setParams({ story: undefined });
             }),
@@ -224,9 +183,61 @@ export default function EditorScreen() {
     );
   }
 
-  /* =========================
-     Render
-     ========================= */
+  // ====== Intercetta "back" sia navigation (beforeRemove) che hardwareBackPress ======
+  const showingAlertRef = useRef(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Handler condiviso
+      const askBeforeLeave = (proceed) => {
+        if (!dirty) { proceed(); return; }
+        if (showingAlertRef.current) return;
+        showingAlertRef.current = true;
+
+        Alert.alert(
+          'Uscire senza salvare?',
+          'Hai modifiche non salvate.',
+          [
+            { text: 'Annulla', style: 'cancel', onPress: () => { showingAlertRef.current = false; } },
+            {
+              text: 'Esci senza salvare',
+              style: 'destructive',
+              onPress: () => { showingAlertRef.current = false; proceed(); },
+            },
+            {
+              text: 'Salva e esci',
+              onPress: async () => {
+                await saveNow({ silent: true });
+                showingAlertRef.current = false;
+                proceed();
+              },
+            },
+          ]
+        );
+      };
+
+      // 1) beforeRemove (tutte le navigazioni)
+      const unsubBeforeRemove = navigation.addListener('beforeRemove', (e) => {
+        if (!dirty) return; // lascia scorrere
+        e.preventDefault();
+        askBeforeLeave(() => navigation.dispatch(e.data.action));
+      });
+
+      // 2) hardwareBackPress (Android tasto fisico)
+      const onHardwareBack = () => {
+        if (!dirty) return false; // consenti default
+        askBeforeLeave(() => navigation.goBack());
+        return true; // blocca default finché non decidi
+      };
+      const backSub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+
+      return () => {
+        unsubBeforeRemove();
+        backSub.remove();
+      };
+    }, [navigation, dirty, title, body])
+  );
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -250,6 +261,7 @@ export default function EditorScreen() {
           ) : null}
         </View>
 
+        {/* Elementi creativi di riferimento */}
         <UsedElementsPanel watchFocus compact />
 
         {/* Titolo */}
@@ -270,9 +282,7 @@ export default function EditorScreen() {
 
         {/* Testo */}
         <View
-          onLayout={(e) => {
-            bodyBlockYRef.current = e.nativeEvent.layout.y;
-          }}
+          onLayout={(e) => { bodyBlockYRef.current = e.nativeEvent.layout.y; }}
           style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <Text style={[styles.label, { color: colors.text }]}>Testo</Text>
@@ -285,21 +295,13 @@ export default function EditorScreen() {
             scrollEnabled
             textAlignVertical="top"
             style={[styles.textArea, { color: colors.text, borderColor: colors.border }]}
-            onFocus={() => {
-              setBodyFocused(true);
-              scrollToBodySoft();
-            }}
+            onFocus={() => { setBodyFocused(true); scrollToBodySoft(); }}
             onBlur={() => setBodyFocused(false)}
             onContentSizeChange={handleBodyContentSizeChange}
           />
 
-          {/* Contatore parole/caratteri (UI-only) */}
-          <View
-            style={[
-              styles.counterBar,
-              { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' },
-            ]}
-          >
+          {/* Contatore parole/caratteri */}
+          <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' }]}>
             <Text style={[styles.counterText, { color: colors.text }]}>
               {countWords(body)} parole • {body.length} caratteri
             </Text>
@@ -324,12 +326,7 @@ export default function EditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   title: { fontSize: ts(22), fontWeight: '800' },
   badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999 },
   badgeText: { fontSize: ts(12), fontWeight: '700' },
