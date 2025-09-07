@@ -24,6 +24,13 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Page } from '../components/Page';
 
+
+// === Helper contatore parole (UI-only) ===
+function countWords(s) {
+  if (!s) return 0;
+  const m = String(s).trim().match(/\S+/g);
+  return m ? m.length : 0;
+}
 function formatDate(iso) {
   try {
     const d = new Date(iso);
@@ -169,6 +176,9 @@ export default function StoriesScreen({ navigation }) {
       </View>
 
       <Text style={[styles.date, { color: colors.text }]}>{formatDate(item.createdAt)}</Text>
+      <Text style={[styles.meta, { color: colors.text }]}>
+        {countWords(item.body)} parole • {String(item.body || '').length} caratteri
+      </Text>
       <Text style={[styles.body, { color: colors.text }]} numberOfLines={3}>{item.body}</Text>
     </Pressable>
   );
@@ -227,6 +237,9 @@ export default function StoriesScreen({ navigation }) {
                   <Text style={[styles.modalTitle, { color: colors.text }]}>{selected.title}</Text>
                 </View>
                 <Text style={[styles.modalDate, { color: colors.text }]}>{formatDate(selected.createdAt)}</Text>
+                <Text style={[styles.modalMeta, { color: colors.text }]}>
+                  {countWords(selected.body)} parole • {String(selected.body || '').length} caratteri
+                </Text>
                 <Text style={[styles.modalBody, { color: colors.text }]}>{selected.body}</Text>
 
                 {/* Elementi usati (sola lettura) nel dettaglio storia */}
@@ -270,7 +283,10 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 16, padding: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1, fontSize: 16, fontWeight: '700' },
-  date: { fontSize: 12, opacity: 0.7, marginTop: 2, marginBottom: 6 },
+  
+  // contatori
+  meta: { fontSize: 12, opacity: 0.8, marginTop: 4 },
+  modalMeta: { fontSize: 12, opacity: 0.8, marginBottom: 8 },date: { fontSize: 12, opacity: 0.7, marginTop: 2, marginBottom: 6 },
   body: { fontSize: 14, opacity: 0.9 },
 
   iconBtn: { padding: 8, borderRadius: 10 },

@@ -16,9 +16,16 @@ import { addStory, updateStory, removeStory, getAllStories } from '../storage/st
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import UsedElementsPanel from '../components/UsedElements';
 
+// Helper non invasivo per il conteggio parole
+function countWords(s) {
+  if (!s) return 0;
+  const m = String(s).trim().match(/\S+/g);
+  return m ? m.length : 0;
+}
+
+function nowIso() { return new Date().toISOString(); }
 const ts = (n) => n;
 
-/** Hook: altezza tastiera */
 function useKeyboardHeight() {
   const [kh, setKh] = useState(0);
   useEffect(() => {
@@ -40,18 +47,17 @@ export default function EditorScreen() {
   const navigation = useNavigation();
   const route = useRoute();
 
-  const editingStory = (route.params && route.params.story) ? route.params.story : null;
-
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [bodyFocused, setBodyFocused] = useState(false);
 
   const initialRef = useRef({ title: '', body: '' });
   const clearOnNextFocusRef = useRef(false);
-
-  const keyboardHeight = useKeyboardHeight();
   const scrollRef = useRef(null);
   const bodyBlockYRef = useRef(0);
+  const keyboardHeight = useKeyboardHeight();
+
+  const editingStory = route?.params?.story || null;
 
   // Reattach ID legacy (se entri con storia senza id)
   useEffect(() => {
@@ -84,22 +90,41 @@ export default function EditorScreen() {
     initialRef.current = { title: ti, body: bo };
   }, [editingStory && editingStory.id]);
 
-  const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
-  const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
-
   // Reset automatico: se l’Editor è in focus senza story param, svuota
   useFocusEffect(
     React.useCallback(() => {
-      if (!(route.params && route.params.story)) {
-        setTitle('');
-        setBody('');
+      if (clearOnNextFocusRef.current && !(route.params && route.params.story)) {
+        setTitle(''); setBody('');
+        navigation.setParams({ story: undefined });
         initialRef.current = { title: '', body: '' };
+        clearOnNextFocusRef.current = false;
       }
       return () => {};
-    }, [route.params && route.params.story])
+    }, [navigation, route.params && route.params.story])
   );
 
-  // Salvataggio robusto
+  const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
+  const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
+  const iosOffset = 0;
+
+  function scrollToBodySoft() {
+    const y = Math.max(0, bodyBlockYRef.current - 12);
+    setTimeout(() => {
+      if (scrollRef.current && scrollRef.current.scrollTo) {
+        scrollRef.current.scrollTo({ y, animated: true });
+      }
+    }, Platform.OS === 'ios' ? 80 : 120);
+  }
+
+  function handleBodyContentSizeChange() {
+    if (!bodyFocused) return;
+    setTimeout(() => {
+      if (scrollRef.current && scrollRef.current.scrollTo) {
+        scrollRef.current.scrollTo({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
+      }
+    }, 50);
+  }
+
   async function saveNow({ silent = false } = {}) {
     const t = String(title || '').trim();
     const b = String(body  || '').trim();
@@ -118,7 +143,7 @@ export default function EditorScreen() {
         if (!silent) Alert.alert('Aggiornata ✨', 'La storia è stata aggiornata.');
       } else if (isEditing && !hasId) {
         await addStory({ title: t, body: b });
-        if (!silent) Alert.alert('Salvata come nuova', 'La storia originale non aveva un id valido, ne ho creata una nuova.');
+        if (!silent) Alert.alert('Salvata come nuova', 'La storia è stata salvata come nuovo elemento.');
       } else {
         await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvata! 💖', 'La tua storia è stata salvata in locale.');
@@ -156,10 +181,7 @@ export default function EditorScreen() {
     }
   }
 
-  async function handleSave() {
-    const ok = await saveNow({ silent: false });
-    if (ok) { /* no-op */ }
-  }
+  async function handleSave() { await saveNow({ silent: false }); }
 
   function handleNew() {
     if (!dirty) {
@@ -179,90 +201,18 @@ export default function EditorScreen() {
             setTitle(''); setBody('');
             navigation.setParams({ story: undefined });
             initialRef.current = { title: '', body: '' };
-          },
+          }
         },
         {
           text: 'Salva e continua',
-          onPress: async () => {
-            const ok = await saveNow({ silent: true });
-            if (ok) {
-              setTitle(''); setBody('');
-              navigation.setParams({ story: undefined });
-              initialRef.current = { title: '', body: '' };
-            }
-          },
+          onPress: () => saveNow({ silent: true }).then(() => {
+            setTitle(''); setBody('');
+            navigation.setParams({ story: undefined });
+            initialRef.current = { title: '', body: '' };
+          })
         },
       ]
     );
-  }
-
-  // Alert + pulizia params quando lasci l’Editor
-  useEffect(() => {
-    const unsub = navigation.addListener('blur', () => {
-      if (dirty) {
-        const parent = navigation.getParent && navigation.getParent();
-        Alert.alert(
-          'Uscire senza salvare?',
-          'Hai modifiche non salvate. Vuoi salvarle prima di uscire?',
-          [
-            {
-              text: 'Torna all’Editor',
-              style: 'cancel',
-              onPress: () => { try { parent && parent.navigate && parent.navigate('Editor'); } catch {} },
-            },
-            {
-              text: 'Esci senza salvare',
-              style: 'destructive',
-              onPress: () => { clearOnNextFocusRef.current = true; },
-            },
-            {
-              text: 'Salva e esci',
-              onPress: async () => {
-                const ok = await saveNow({ silent: true });
-                if (ok) clearOnNextFocusRef.current = false;
-              },
-            },
-          ]
-        );
-      }
-      // azzero i params in uscita
-      navigation.setParams({ story: undefined });
-    });
-    return unsub;
-  }, [dirty, navigation, title, body, editingStory && editingStory.id]);
-
-  // Pulizia campi se scelto "Esci senza salvare"
-  useFocusEffect(
-    React.useCallback(() => {
-      if (clearOnNextFocusRef.current && !(route.params && route.params.story)) {
-        setTitle(''); setBody('');
-        navigation.setParams({ story: undefined });
-        initialRef.current = { title: '', body: '' };
-        clearOnNextFocusRef.current = false;
-      }
-      return () => {};
-    }, [navigation, route.params && route.params.story])
-  );
-
-  // --- UX tastiera/scroll ---
-  const iosOffset = 0;
-
-  function scrollToBodySoft() {
-    const y = Math.max(0, bodyBlockYRef.current - 12);
-    setTimeout(() => {
-      if (scrollRef.current && scrollRef.current.scrollTo) {
-        scrollRef.current.scrollTo({ y, animated: true });
-      }
-    }, Platform.OS === 'ios' ? 80 : 120);
-  }
-
-  function handleBodyContentSizeChange() {
-    if (!bodyFocused) return;
-    setTimeout(() => {
-      if (scrollRef.current && scrollRef.current.scrollTo) {
-        scrollRef.current.scrollTo({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
-      }
-    }, 50);
   }
 
   return (
@@ -288,14 +238,7 @@ export default function EditorScreen() {
           ) : null}
         </View>
 
-        <UsedElementsPanel
-          watchFocus
-          compact
-          collapsible
-          defaultCollapsed
-          maxHeight={120}
-          title="Elementi usati"
-        />
+        <UsedElementsPanel watchFocus compact />
 
         {/* TITOLO */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -332,6 +275,13 @@ export default function EditorScreen() {
             onBlur={() => setBodyFocused(false)}
             onContentSizeChange={handleBodyContentSizeChange}
           />
+
+          {/* 🔢 Contatore parole/caratteri — UI only, no storage changes */}
+          <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' }]}>
+            <Text style={[styles.counterText, { color: colors.text }]}>
+              {countWords(body)} parole • {body.length} caratteri
+            </Text>
+          </View>
         </View>
 
         {/* Bottoni */}
@@ -381,6 +331,10 @@ const styles = StyleSheet.create({
     minHeight: 200,
     fontSize: ts(16),
   },
+
+  /* Contatore */
+  counterBar: { marginTop: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
+  counterText: { fontSize: ts(12), opacity: 0.8, textAlign: 'right' },
 
   actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14 },
