@@ -11,7 +11,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   ScrollView,
-  BackHandler, // 👈
+  BackHandler,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory, getAllStories } from '../storage/stories';
@@ -63,7 +63,7 @@ export default function EditorScreen() {
 
   const editingStory = route?.params?.story ?? null;
 
-  // pulizia params in uscita
+  // Pulizia params in uscita
   useEffect(() => {
     const unsub = navigation.addListener('blur', () => {
       navigation.setParams({ story: undefined });
@@ -71,7 +71,7 @@ export default function EditorScreen() {
     return unsub;
   }, [navigation]);
 
-  // reset quando entri senza story
+  // Reset quando entri senza story
   useFocusEffect(
     React.useCallback(() => {
       if (!route?.params?.story) {
@@ -84,7 +84,7 @@ export default function EditorScreen() {
     }, [navigation, route?.params?.story])
   );
 
-  // carica dati quando modifichi
+  // Carica dati quando modifichi
   useEffect(() => {
     if (editingStory) {
       const ti = editingStory.title ?? '';
@@ -95,7 +95,7 @@ export default function EditorScreen() {
     }
   }, [editingStory?.id]);
 
-  // reattach ID se manca
+  // Reattach ID se manca
   useEffect(() => {
     let cancelled = false;
     async function reattachIdIfMissing() {
@@ -183,12 +183,10 @@ export default function EditorScreen() {
     );
   }
 
-  // ====== Intercetta "back" sia navigation (beforeRemove) che hardwareBackPress ======
+  // ====== Intercetta back: beforeRemove + hardwareBackPress ======
   const showingAlertRef = useRef(false);
-
   useFocusEffect(
     React.useCallback(() => {
-      // Handler condiviso
       const askBeforeLeave = (proceed) => {
         if (!dirty) { proceed(); return; }
         if (showingAlertRef.current) return;
@@ -216,25 +214,20 @@ export default function EditorScreen() {
         );
       };
 
-      // 1) beforeRemove (tutte le navigazioni)
       const unsubBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-        if (!dirty) return; // lascia scorrere
+        if (!dirty) return;
         e.preventDefault();
         askBeforeLeave(() => navigation.dispatch(e.data.action));
       });
 
-      // 2) hardwareBackPress (Android tasto fisico)
       const onHardwareBack = () => {
-        if (!dirty) return false; // consenti default
+        if (!dirty) return false;
         askBeforeLeave(() => navigation.goBack());
-        return true; // blocca default finché non decidi
+        return true;
       };
       const backSub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
 
-      return () => {
-        unsubBeforeRemove();
-        backSub.remove();
-      };
+      return () => { unsubBeforeRemove(); backSub.remove(); };
     }, [navigation, dirty, title, body])
   );
 
@@ -252,14 +245,15 @@ export default function EditorScreen() {
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         automaticallyAdjustKeyboardInsets
       >
-        <View style={styles.headerRow}>
-          <Text style={[styles.title, { color: colors.text }]}>Editor</Text>
-          {editingStory ? (
+
+        {/* Piccolo badge “Modifica” (senza titolo ridondante) */}
+        {editingStory ? (
+          <View style={{ alignItems: 'flex-end', marginBottom: 8 }}>
             <View style={[styles.badge, { backgroundColor: colors.accent2 || colors.accent }]}>
               <Text style={[styles.badgeText, { color: colors.text }]}>Modifica ✏️</Text>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
         {/* Elementi creativi di riferimento */}
         <UsedElementsPanel watchFocus compact />
@@ -326,8 +320,6 @@ export default function EditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  title: { fontSize: ts(22), fontWeight: '800' },
   badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999 },
   badgeText: { fontSize: ts(12), fontWeight: '700' },
 

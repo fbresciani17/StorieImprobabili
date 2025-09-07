@@ -11,12 +11,20 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
-import { getAllStories, removeStory } from '../storage/stories';
-import UsedElementsPanel from '../components/UsedElements'; // elementi creativi in modale
-import * as Clipboard from 'expo-clipboard'; // copia negli appunti
+import {
+  getAllStories,
+  removeStory,
+  addStory, // per fallback import
+} from '../storage/stories';
+import UsedElementsPanel from '../components/UsedElements';
+import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 
 // Helper contatore parole (UI-only)
 function countWords(s) {
@@ -189,7 +197,7 @@ export default function StoriesScreen() {
     );
   };
 
-  // --- copia negli appunti (titolo + testo in un colpo solo) ---
+  // Copia (titolo + testo) dalla modale
   const copyStory = async () => {
     const t = String(preview?.title || '');
     const b = String(preview?.body || '');
@@ -198,11 +206,85 @@ export default function StoriesScreen() {
     Alert.alert('Copiato', 'Racconto (titolo + testo) copiato negli appunti.');
   };
 
+  // ===== Export su FILE (JSON) =====
+  const doExportToFile = async () => {
+    try {
+      const list = await getAllStories();
+      const json = JSON.stringify(list || [], null, 2);
+
+      const date = new Date();
+      const stamp = date.toISOString().replace(/[:.]/g, '-');
+      const filename = `storie-export-${stamp}.json`;
+
+      const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      const fileUri = (dir.endsWith('/') ? dir : dir + '/') + filename;
+
+      await FileSystem.writeAsStringAsync(fileUri, json, { encoding: FileSystem.EncodingType.UTF8 });
+
+      if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'Esporta storie' });
+      } else {
+        Alert.alert('Esportato', `File creato: ${fileUri}`);
+      }
+    } catch {
+      Alert.alert('Errore export', 'Impossibile esportare le storie.');
+    }
+  };
+
+  // ===== Import da FILE (JSON) =====
+  const doImportFromFile = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/json', 'text/plain'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (!res || res.canceled) return;
+
+      const asset = res.assets?.[0];
+      const uri = asset?.uri;
+      if (!uri) { Alert.alert('Errore import', 'File non valido.'); return; }
+
+      const raw = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
+      const parsed = JSON.parse(raw);
+
+      if (!Array.isArray(parsed)) throw new Error('Formato JSON non valido (atteso un array).');
+      let added = 0;
+      for (const it of parsed) {
+        const title = String(it?.title || '').trim();
+        const body = String(it?.body || '').trim();
+        if (title || body) { await addStory({ title, body }); added += 1; }
+      }
+      await load();
+      Alert.alert('Import riuscito', added ? `Importate ${added} storie.` : 'Nessuna storia valida trovata nel file.');
+    } catch {
+      Alert.alert('Errore import', 'Controlla che il file JSON sia valido.');
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text }]}>Storie</Text>
+      {/* Top tools (solo pulsanti a destra, niente titolo “Storie”) */}
+      <View style={styles.topToolsRow}>
+        <View style={{ flex: 1 }} />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={doImportFromFile}
+            style={[styles.toolsBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+            accessibilityRole="button"
+            accessibilityLabel="Importa da file"
+          >
+            <Text style={[styles.toolsBtnText, { color: colors.text }]}>📥</Text>
+          </Pressable>
+          <Pressable
+            onPress={doExportToFile}
+            style={[styles.toolsBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+            accessibilityRole="button"
+            accessibilityLabel="Esporta su file"
+          >
+            <Text style={[styles.toolsBtnText, { color: colors.text }]}>📤</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Search + Sort */}
@@ -259,7 +341,7 @@ export default function StoriesScreen() {
         keyboardShouldPersistTaps="handled"
       />
 
-      {/* Modale di visualizzazione (read-only) */}
+      {/* Modale di visualizzazione */}
       <Modal visible={!!preview} transparent animationType="slide" onRequestClose={() => setPreview(null)}>
         <View style={[styles.modalWrap, { backgroundColor: colors.background + 'F2' }]}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -310,15 +392,16 @@ export default function StoriesScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
+  topToolsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 4,
   },
-  title: { fontSize: ts(22), fontWeight: '800' },
+
+  toolsBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 4, paddingHorizontal: 10 },
+  toolsBtnText: { fontSize: ts(18), fontWeight: '800' },
 
   // Search + sort
   searchInput: {
