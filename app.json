@@ -1,25 +1,38 @@
 {
-"expo": {
-"name": "Storie Improbabili",
-"slug": "storie-improbabili",
-"scheme": "storieimprobabili",
-"version": "1.0.0",
-"orientation": "portrait",
-"icon": "./assets/icon.png",
-"splash": {
-"image": "./assets/splash.png",
-"resizeMode": "contain",
-"backgroundColor": "#FFF9FE"
-},
-"updates": { "enabled": true },
-"assetBundlePatterns": ["**/*"],
-"ios": { "supportsTablet": true },
-"android": {
-"adaptiveIcon": {
-"foregroundImage": "./assets/adaptive-icon.png",
-"backgroundColor": "#FFF9FE"
-}
-},
-"web": { "bundler": "metro" }
-}
+  "expo": {
+    "name": "StorieImprobabili",
+    "slug": "storieimprobabili",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tuonome.storieimprobabili"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.tuonome.storieimprobabili",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "SOSTITUISCI-CON-IL-TUO-PROJECT-ID"
+      }
+    }
+  }
 }

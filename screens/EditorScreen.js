@@ -6,96 +6,176 @@ import {
   TextInput,
   Pressable,
   Alert,
+  Platform,
+  Keyboard,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { addStory, updateStory } from '../storage/stories';
+import { addStory, updateStory, removeStory, getAllStories } from '../storage/stories';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { PageScroll } from '../components/Page';
-import { ts } from '../theme/typography';
+import UsedElementsPanel from '../components/UsedElements';
+
+const ts = (n) => n;
+
+/** Hook: altezza tastiera */
+function useKeyboardHeight() {
+  const [kh, setKh] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow',
+      (e) => setKh((e && e.endCoordinates && e.endCoordinates.height) ? e.endCoordinates.height : 0)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
+      () => setKh(0)
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  return kh;
+}
 
 export default function EditorScreen() {
-  const { mode, colors } = useTheme();
+  const { colors, mode } = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
 
-  const editingStory = route.params?.story ?? null;
+  const editingStory = (route.params && route.params.story) ? route.params.story : null;
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [bodyFocused, setBodyFocused] = useState(false);
 
-  // Snapshot per determinare le modifiche non salvate
   const initialRef = useRef({ title: '', body: '' });
-
-  // Flag: pulire i campi al prossimo focus dell’Editor?
   const clearOnNextFocusRef = useRef(false);
 
-  // Carica eventuale storia da modificare e azzera "dirty"
+  const keyboardHeight = useKeyboardHeight();
+  const scrollRef = useRef(null);
+  const bodyBlockYRef = useRef(0);
+
+  // --- NUOVO: se si entra in modifica ma la storia non ha id (legacy), prova a ri-associare l'id ---
   useEffect(() => {
-    const ti = editingStory?.title ?? '';
-    const bo = editingStory?.body ?? '';
+    let cancelled = false;
+    async function reattachIdIfMissing() {
+      if (!editingStory) return;
+      if (editingStory.id) return; // già ok
+      const t = (editingStory.title || '').trim();
+      const b = (editingStory.body || '').trim();
+      if (!t && !b) return;
+
+      try {
+        const all = await getAllStories();
+        // trova la prima storia con stesso titolo e testo
+        const found = all.find(s => String(s.title || '') === t && String(s.body || '') === b);
+        if (found && !cancelled) {
+          // aggiorna i params dell'Editor con la storia che ha id
+          navigation.setParams({ story: found });
+        }
+      } catch (e) {
+        // silenzioso: in caso di errore lascio com'è, ma l'update farà comunque fallback sicuro
+        console.warn('ReattachId error:', e);
+      }
+    }
+    reattachIdIfMissing();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingStory && editingStory.title, editingStory && editingStory.body]);
+
+  // Carica eventuale storia in modifica (o reset per nuova)
+  useEffect(() => {
+    const ti = editingStory && editingStory.title ? editingStory.title : '';
+    const bo = editingStory && editingStory.body ? editingStory.body : '';
     setTitle(ti);
     setBody(bo);
     initialRef.current = { title: ti, body: bo };
-  }, [editingStory?.id]);
+  }, [editingStory && editingStory.id]);
 
   const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
-
-  // "dirty" = differente dallo snapshot
   const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
 
-  // Salvataggio
+  // RESET AUTOMATICO: quando l'Editor torna in focus e NON stai modificando, azzera i campi
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!(route.params && route.params.story)) {
+        setTitle('');
+        setBody('');
+        initialRef.current = { title: '', body: '' };
+      }
+      return () => {};
+    }, [route.params && route.params.story])
+  );
+
+  // Salvataggio robusto: update → fallback rimuovendo la vecchia e salvando nuova (no duplicati)
   async function saveNow({ silent = false } = {}) {
-    const t = title.trim();
-    const b = body.trim();
+    const t = String(title || '').trim();
+    const b = String(body  || '').trim();
     if (!t || !b) {
       if (!silent) Alert.alert('Ops', 'Aggiungi almeno titolo e testo prima di salvare.');
       return false;
     }
+
+    const isEditing = !!editingStory;
+    const hasId = !!(editingStory && editingStory.id);
+
     try {
-      if (editingStory) {
-        await updateStory(editingStory.id, { title: t, body: b });
-        if (!silent) Alert.alert('Aggiornata ✨', 'La tua storia è stata aggiornata.');
+      if (isEditing && hasId) {
+        const payload = { ...editingStory, title: t, body: b };
+        await updateStory(payload);
+        if (!silent) Alert.alert('Aggiornata ✨', 'La storia è stata aggiornata.');
+      } else if (isEditing && !hasId) {
+        // dopo reattachIdIfMissing è raro arrivare qui, ma gestiamo lo stesso
+        await addStory({ title: t, body: b });
+        if (!silent) Alert.alert('Salvata come nuova', 'La storia originale non aveva un id valido, ne ho creata una nuova.');
       } else {
         await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvata! 💖', 'La tua storia è stata salvata in locale.');
       }
-      // Aggiorno lo snapshot per non risultare più dirty
+
       initialRef.current = { title: t, body: b };
       return true;
+
     } catch (e) {
-      console.warn(e);
-      if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
-      else Alert.alert('Errore', 'Salvataggio non riuscito.');
-      return false;
+      if (isEditing && hasId) {
+        try { await removeStory(editingStory.id); } catch {}
+      }
+      try {
+        await addStory({ title: t, body: b });
+        if (!silent) {
+          Alert.alert(
+            'Aggiornamento non riuscito',
+            'Ho salvato il contenuto come nuova storia e rimosso la versione precedente.'
+          );
+        }
+        initialRef.current = { title: t, body: b };
+        return true;
+      } catch (e2) {
+        if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
+        return false;
+      }
     }
   }
 
   async function handleSave() {
     const ok = await saveNow({ silent: false });
-    if (ok) {
-      // dopo salvataggio manuale restiamo su editor, non puliamo subito
-    }
+    if (ok) { /* opzionale: navigation.setParams({ story: undefined }); */ }
   }
 
   function handleNew() {
     if (!dirty) {
-      setTitle('');
-      setBody('');
+      setTitle(''); setBody('');
       navigation.setParams({ story: undefined });
       initialRef.current = { title: '', body: '' };
       return;
     }
     Alert.alert(
       'Nuova bozza 🌸',
-      'Ci sono modifiche non salvate. Vuoi salvarle prima di creare una nuova bozza?',
+      'Hai modifiche non salvate. Vuoi conservarle prima di creare una nuova bozza?',
       [
         { text: 'Annulla', style: 'cancel' },
         {
-          text: 'Esci senza salvare',
-          style: 'destructive',
+          text: 'Non salvare', style: 'destructive',
           onPress: () => {
-            setTitle('');
-            setBody('');
+            setTitle(''); setBody('');
             navigation.setParams({ story: undefined });
             initialRef.current = { title: '', body: '' };
           },
@@ -105,8 +185,7 @@ export default function EditorScreen() {
           onPress: async () => {
             const ok = await saveNow({ silent: true });
             if (ok) {
-              setTitle('');
-              setBody('');
+              setTitle(''); setBody('');
               navigation.setParams({ story: undefined });
               initialRef.current = { title: '', body: '' };
             }
@@ -120,8 +199,7 @@ export default function EditorScreen() {
   useEffect(() => {
     const unsub = navigation.addListener('blur', () => {
       if (!dirty) return;
-      const parent = navigation.getParent?.();
-
+      const parent = navigation.getParent && navigation.getParent();
       Alert.alert(
         'Uscire senza salvare?',
         'Hai modifiche non salvate. Vuoi salvarle prima di uscire?',
@@ -129,97 +207,144 @@ export default function EditorScreen() {
           {
             text: 'Torna all’Editor',
             style: 'cancel',
-            onPress: () => {
-              // Non pulire al prossimo focus: stai rientrando per continuare
-              clearOnNextFocusRef.current = false;
-              parent?.navigate('Editor');
-            },
+            onPress: () => { try { parent && parent.navigate && parent.navigate('Editor'); } catch {} },
           },
           {
             text: 'Esci senza salvare',
             style: 'destructive',
-            onPress: () => {
-              // Pulire i campi quando si tornerà all’Editor
-              clearOnNextFocusRef.current = true;
-            },
+            onPress: () => { clearOnNextFocusRef.current = true; },
           },
           {
-            text: 'Salva e continua',
+            text: 'Salva e esci',
             onPress: async () => {
               const ok = await saveNow({ silent: true });
-              // In ogni caso, al ritorno vogliamo un Editor vuoto
-              clearOnNextFocusRef.current = true;
+              if (ok) clearOnNextFocusRef.current = false;
             },
           },
         ]
       );
     });
-
     return unsub;
-  }, [navigation, dirty, title, body]);
+  }, [dirty, navigation, title, body, editingStory && editingStory.id]);
 
-  // Quando l'Editor torna in focus, pulisci se richiesto e se non stai aprendo per modificare una storia
+  // Pulizia campi se scelto "Esci senza salvare"
   useFocusEffect(
     React.useCallback(() => {
-      if (clearOnNextFocusRef.current && !route.params?.story) {
-        setTitle('');
-        setBody('');
+      if (clearOnNextFocusRef.current && !(route.params && route.params.story)) {
+        setTitle(''); setBody('');
         navigation.setParams({ story: undefined });
         initialRef.current = { title: '', body: '' };
         clearOnNextFocusRef.current = false;
       }
       return () => {};
-    }, [route.params?.story])
+    }, [navigation, route.params && route.params.story])
   );
 
+  const iosOffset = 0;
+
+  function scrollToBodySoft() {
+    const y = Math.max(0, bodyBlockYRef.current - 12);
+    setTimeout(() => {
+      if (scrollRef.current && scrollRef.current.scrollTo) {
+        scrollRef.current.scrollTo({ y, animated: true });
+      }
+    }, Platform.OS === 'ios' ? 80 : 120);
+  }
+
+  function handleBodyContentSizeChange() {
+    if (!bodyFocused) return;
+    setTimeout(() => {
+      if (scrollRef.current && scrollRef.current.scrollTo) {
+        scrollRef.current.scrollTo({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
+      }
+    }, 50);
+  }
+
   return (
-    <PageScroll>
-      <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text }]}>Editor</Text>
-        {editingStory ? (
-          <View style={[styles.badge, { backgroundColor: colors.accent2 || colors.accent }]}>
-            <Text style={[styles.badgeText, { color: colors.text }]}>Modifica ✏️</Text>
-          </View>
-        ) : null}
-      </View>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? iosOffset : 0}
+    >
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{ padding: 16, paddingBottom: (keyboardHeight || 0) + 24 }}
+        style={{ flex: 1, backgroundColor: colors.background }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, { color: colors.text }]}>Editor</Text>
+          {editingStory ? (
+            <View style={[styles.badge, { backgroundColor: colors.accent2 || colors.accent }]}>
+              <Text style={[styles.badgeText, { color: colors.text }]}>Modifica ✏️</Text>
+            </View>
+          ) : null}
+        </View>
 
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.label, { color: colors.text }]}>Titolo</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Inserisci il titolo"
-          placeholderTextColor={placeholder}
-          style={[styles.input, { color: colors.text }]}
-          returnKeyType="next"
+        <UsedElementsPanel
+          watchFocus
+          compact
+          collapsible
+          defaultCollapsed
+          maxHeight={120}
+          title="Elementi usati"
         />
 
-        <Text style={[styles.label, { color: colors.text, marginTop: 16 }]}>Testo</Text>
-        <TextInput
-          value={body}
-          onChangeText={setBody}
-          placeholder="Scrivi qui la tua storia…"
-          placeholderTextColor={placeholder}
-          style={[styles.textarea, { color: colors.text }]}
-          multiline
-          textAlignVertical="top"
-        />
-      </View>
+        {/* TITOLO */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.label, { color: colors.text }]}>Titolo</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Inserisci il titolo"
+            placeholderTextColor={placeholder}
+            style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+            autoCorrect={false}
+            autoCapitalize="sentences"
+            returnKeyType="next"
+            blurOnSubmit={false}
+          />
+        </View>
 
-      <View style={styles.actions}>
-        <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.btnText, { color: colors.textOnButton }]}>
-            {editingStory ? 'Aggiorna ✨' : 'Salva 💖'}
-          </Text>
-        </Pressable>
+        {/* TESTO */}
+        <View
+          onLayout={(e) => { bodyBlockYRef.current = e.nativeEvent.layout.y; }}
+          style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          <Text style={[styles.label, { color: colors.text }]}>Testo</Text>
+          <TextInput
+            value={body}
+            onChangeText={setBody}
+            placeholder="Scrivi qui la tua storia"
+            placeholderTextColor={placeholder}
+            multiline
+            scrollEnabled
+            textAlignVertical="top"
+            style={[styles.textArea, { color: colors.text, borderColor: colors.border }]}
+            onFocus={() => { setBodyFocused(true); scrollToBodySoft(); }}
+            onBlur={() => setBodyFocused(false)}
+            onContentSizeChange={handleBodyContentSizeChange}
+          />
+        </View>
 
-        <Pressable onPress={handleNew} style={[styles.btnGhost, { borderColor: colors.border }]}>
-          <Text style={[styles.btnGhostText, { color: colors.text }]}>
-            {editingStory ? 'Annulla modifica' : 'Nuova bozza 🌸'}
-          </Text>
-        </Pressable>
-      </View>
-    </PageScroll>
+        {/* Bottoni */}
+        <View style={styles.actions}>
+          <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.btnText, { color: colors.textOnButton || '#FFFFFF' }]}>
+              {editingStory ? 'Aggiorna ✨' : 'Salva 💖'}
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={handleNew} style={[styles.btnGhost, { borderColor: colors.border }]}>
+            <Text style={[styles.btnGhostText, { color: colors.text }]}>
+              {editingStory ? 'Annulla modifica' : 'Nuova bozza 🌸'}
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -229,8 +354,9 @@ const styles = StyleSheet.create({
   badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999 },
   badgeText: { fontSize: ts(12), fontWeight: '700' },
 
-  card: { borderWidth: 1, borderRadius: 16, padding: 12 },
+  card: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 12 },
   label: { fontSize: ts(13), opacity: 0.9, marginBottom: 6 },
+
   input: {
     backgroundColor: 'transparent',
     borderWidth: 1,
@@ -240,7 +366,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: ts(16),
   },
-  textarea: {
+  textArea: {
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: 'transparent',
@@ -251,7 +377,7 @@ const styles = StyleSheet.create({
     fontSize: ts(16),
   },
 
-  actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 12 },
+  actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14 },
   btnText: { fontSize: ts(16), fontWeight: '700' },
   btnGhost: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1 },
