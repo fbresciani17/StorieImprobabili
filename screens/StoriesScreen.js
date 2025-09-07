@@ -9,18 +9,21 @@ import {
   Alert,
   RefreshControl,
   TextInput,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { getAllStories, removeStory } from '../storage/stories';
+import UsedElementsPanel from '../components/UsedElements'; // elementi creativi in modale
+import * as Clipboard from 'expo-clipboard'; // copia negli appunti
 
-// === Helper contatore parole (UI-only) ===
+// Helper contatore parole (UI-only)
 function countWords(s) {
   if (!s) return 0;
   const m = String(s).trim().match(/\S+/g);
   return m ? m.length : 0;
 }
-
 const ts = (n) => n;
 
 export default function StoriesScreen() {
@@ -30,12 +33,15 @@ export default function StoriesScreen() {
   const [stories, setStories] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🔎 Ricerca (UI-only)
+  // Ricerca (UI-only)
   const [query, setQuery] = useState('');
 
-  // ↕️ Ordinamento (UI-only)
+  // Ordinamento (UI-only)
   // key: 'updatedAt' | 'createdAt' | 'title' ; dir: 'asc' | 'desc'
   const [sort, setSort] = useState({ key: 'updatedAt', dir: 'desc' });
+
+  // Modale di visualizzazione
+  const [preview, setPreview] = useState(null); // {id,title,body,createdAt,updatedAt} | null
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +83,7 @@ export default function StoriesScreen() {
             try {
               await removeStory(storyId);
               setStories((prev) => prev.filter((s) => s.id !== storyId));
+              if (preview?.id === storyId) setPreview(null);
             } catch {}
           },
         },
@@ -85,10 +92,11 @@ export default function StoriesScreen() {
   }
 
   function openEditor(story) {
+    setPreview(null);
     navigation.navigate('Editor', { story });
   }
 
-  // 🔎 Filtro per ricerca (title+body, case-insensitive)
+  // Filtro ricerca
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return stories;
@@ -99,7 +107,7 @@ export default function StoriesScreen() {
     });
   }, [stories, query]);
 
-  // ↕️ Ordinamento UI
+  // Ordinamento
   const sorted = useMemo(() => {
     const list = [...filtered];
     list.sort((a, b) => {
@@ -110,19 +118,15 @@ export default function StoriesScreen() {
       if (key === 'title') {
         cmp = String(av).localeCompare(String(bv), 'it', { sensitivity: 'base' });
       } else {
-        // createdAt/updatedAt: confronto tra ISO stringhe è stabile
-        cmp = String(av).localeCompare(String(bv));
+        cmp = String(av).localeCompare(String(bv)); // ISO strings
       }
       return dir === 'asc' ? cmp : -cmp;
     });
     return list;
   }, [filtered, sort]);
 
-  const toggleDir = () =>
-    setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }));
-
-  const setSortKey = (key) =>
-    setSort((s) => (s.key === key ? s : { ...s, key }));
+  const toggleDir = () => setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }));
+  const setSortKey = (key) => setSort((s) => (s.key === key ? s : { ...s, key }));
 
   const SortChip = ({ label, active, onPress }) => (
     <Pressable
@@ -143,7 +147,7 @@ export default function StoriesScreen() {
     const body = String(item.body || '');
     return (
       <Pressable
-        onPress={() => openEditor(item)}
+        onPress={() => setPreview(item)} // ⇦ SOLO visualizzazione
         style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
         <View style={styles.itemHeader}>
@@ -171,11 +175,9 @@ export default function StoriesScreen() {
           </View>
         </View>
 
-        <Text style={[styles.date, { color: colors.text }]}>
-          {formatDate(item.createdAt)}
-        </Text>
+        <Text style={[styles.date, { color: colors.text }]}>{formatDate(item.createdAt)}</Text>
 
-        {/* === Contatore parole/caratteri (UI-only) === */}
+        {/* Contatore parole/caratteri */}
         <Text style={[styles.meta, { color: colors.text }]}>
           {countWords(body)} parole • {body.length} caratteri
         </Text>
@@ -187,6 +189,15 @@ export default function StoriesScreen() {
     );
   };
 
+  // --- copia negli appunti (titolo + testo in un colpo solo) ---
+  const copyStory = async () => {
+    const t = String(preview?.title || '');
+    const b = String(preview?.body || '');
+    const full = t ? `${t}\n\n${b}` : b;
+    await Clipboard.setStringAsync(full);
+    Alert.alert('Copiato', 'Racconto (titolo + testo) copiato negli appunti.');
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
@@ -194,7 +205,7 @@ export default function StoriesScreen() {
         <Text style={[styles.title, { color: colors.text }]}>Storie</Text>
       </View>
 
-      {/* 🔎 Barra ricerca + ↕️ Ordinamento */}
+      {/* Search + Sort */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
         <TextInput
           value={query}
@@ -212,21 +223,9 @@ export default function StoriesScreen() {
         />
 
         <View style={styles.sortRow}>
-          <SortChip
-            label="Aggiornamento"
-            active={sort.key === 'updatedAt'}
-            onPress={() => setSortKey('updatedAt')}
-          />
-          <SortChip
-            label="Creazione"
-            active={sort.key === 'createdAt'}
-            onPress={() => setSortKey('createdAt')}
-          />
-          <SortChip
-            label="Titolo A→Z"
-            active={sort.key === 'title'}
-            onPress={() => setSortKey('title')}
-          />
+          <SortChip label="Aggiornamento" active={sort.key === 'updatedAt'} onPress={() => setSortKey('updatedAt')} />
+          <SortChip label="Creazione" active={sort.key === 'createdAt'} onPress={() => setSortKey('createdAt')} />
+          <SortChip label="Titolo A→Z" active={sort.key === 'title'} onPress={() => setSortKey('title')} />
 
           <Pressable
             onPress={toggleDir}
@@ -251,9 +250,7 @@ export default function StoriesScreen() {
         renderItem={renderItem}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        refreshControl={
-          <RefreshControl tintColor={colors.text} refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl tintColor={colors.text} refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <Text style={{ color: colors.text, opacity: 0.7, textAlign: 'center', marginTop: 24 }}>
             Nessuna storia trovata.
@@ -261,6 +258,53 @@ export default function StoriesScreen() {
         }
         keyboardShouldPersistTaps="handled"
       />
+
+      {/* Modale di visualizzazione (read-only) */}
+      <Modal visible={!!preview} transparent animationType="slide" onRequestClose={() => setPreview(null)}>
+        <View style={[styles.modalWrap, { backgroundColor: colors.background + 'F2' }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]} numberOfLines={2}>
+                {preview?.title || 'Senza titolo'}
+              </Text>
+              <Pressable onPress={() => setPreview(null)} style={[styles.closeBtn, { borderColor: colors.border }]}>
+                <Text style={{ color: colors.text, fontWeight: '800' }}>✕</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.modalDate, { color: colors.text }]}>{formatDate(preview?.createdAt)}</Text>
+            <Text style={[styles.modalMeta, { color: colors.text }]}>
+              {countWords(preview?.body || '')} parole • {String(preview?.body || '').length} caratteri
+            </Text>
+
+            {/* Elementi creativi di riferimento (read-only/compatto) */}
+            <View style={{ marginTop: 8 }}>
+              <UsedElementsPanel compact />
+            </View>
+
+            <ScrollView style={{ maxHeight: '50%' }} contentContainerStyle={{ paddingVertical: 8 }}>
+              <Text style={[styles.modalBody, { color: colors.text }]}>{preview?.body || ''}</Text>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Pressable onPress={copyStory} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.modalBtnText, { color: colors.textOnButton || '#FFFFFF' }]}>
+                  Copia racconto 📋
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => openEditor(preview)} style={[styles.modalBtn, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.modalBtnText, { color: colors.text }]}>Modifica ✏️</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => confirmDelete(preview.id)}
+                style={[styles.modalBtnGhost, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.modalBtnGhostText, { color: colors.text }]}>Elimina 🗑️</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -321,4 +365,19 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, opacity: 0.8, marginTop: 4 },
 
   body: { fontSize: ts(14), marginTop: 6 },
+
+  // Modal
+  modalWrap: { flex: 1, justifyContent: 'flex-end' },
+  modalCard: { borderWidth: 1, borderRadius: 16, padding: 14, margin: 12 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center' },
+  modalTitle: { flex: 1, fontSize: ts(18), fontWeight: '800', marginRight: 8 },
+  closeBtn: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  modalDate: { fontSize: ts(12), opacity: 0.8, marginTop: 4 },
+  modalMeta: { fontSize: ts(12), opacity: 0.8, marginTop: 2 },
+  modalBody: { fontSize: ts(15), lineHeight: 22, marginTop: 8 },
+  modalActions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 12 },
+  modalBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
+  modalBtnText: { fontSize: ts(14), fontWeight: '800' },
+  modalBtnGhost: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1 },
+  modalBtnGhostText: { fontSize: ts(14), fontWeight: '700' },
 });
