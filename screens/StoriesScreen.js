@@ -1,4 +1,5 @@
-import React, { useCallback, useState } from 'react';
+// screens/StoriesScreen.js
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,24 +7,12 @@ import {
   FlatList,
   Pressable,
   Alert,
-  Modal,
-  ScrollView,
+  RefreshControl,
+  TextInput,
 } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
-import UsedElementsPanel from '../components/UsedElements';
-import {
-  getAllStories,
-  removeStory,
-  exportStoriesToFile,
-  importStoriesFromFile,
-} from '../storage/stories';
-import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
-import * as Clipboard from 'expo-clipboard';
-import { Page } from '../components/Page';
-
+import { getAllStories, removeStory } from '../storage/stories';
 
 // === Helper contatore parole (UI-only) ===
 function countWords(s) {
@@ -31,280 +20,305 @@ function countWords(s) {
   const m = String(s).trim().match(/\S+/g);
   return m ? m.length : 0;
 }
-function formatDate(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('it-IT', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
 
-export default function StoriesScreen({ navigation }) {
+const ts = (n) => n;
+
+export default function StoriesScreen() {
   const { colors } = useTheme();
-  const [stories, setStories] = useState([]);
-  const [selected, setSelected] = useState(null); // {id,title,body,createdAt,...} | null
-  const [modalVisible, setModalVisible] = useState(false);
+  const navigation = useNavigation();
 
-  const openDetail = (story) => { setSelected(story); setModalVisible(true); };
-  const closeDetail = () => { setModalVisible(false); setSelected(null); };
+  const [stories, setStories] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // 🔎 Ricerca (UI-only)
+  const [query, setQuery] = useState('');
+
+  // ↕️ Ordinamento (UI-only)
+  // key: 'updatedAt' | 'createdAt' | 'title' ; dir: 'asc' | 'desc'
+  const [sort, setSort] = useState({ key: 'updatedAt', dir: 'desc' });
 
   const load = useCallback(async () => {
-    const list = await getAllStories();
-    setStories(list);
+    try {
+      const list = await getAllStories();
+      setStories(Array.isArray(list) ? list : []);
+    } catch {
+      setStories([]);
+    }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
-  async function doDelete(storyId) {
-    const next = stories.filter((s) => s.id !== storyId);
-    setStories(next);
-    try { await removeStory(storyId); } catch {}
-    if (selected && selected.id === storyId) closeDetail();
-  }
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  const formatDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString();
+  };
 
   function confirmDelete(storyId) {
     Alert.alert(
       'Elimina 🗑️',
-      'Vuoi davvero dire addio a questa storia? 😢',
+      'Vuoi davvero eliminare questa storia?',
       [
         { text: 'Annulla', style: 'cancel' },
-        { text: 'Elimina', style: 'destructive', onPress: () => doDelete(storyId) },
+        {
+          text: 'Elimina',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeStory(storyId);
+              setStories((prev) => prev.filter((s) => s.id !== storyId));
+            } catch {}
+          },
+        },
       ]
     );
   }
 
-  async function editFromList(story) {
-    closeDetail();
+  function openEditor(story) {
     navigation.navigate('Editor', { story });
   }
 
-  async function handleExportFile() {
-    try {
-      const filename = await exportStoriesToFile();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(filename, {
-          mimeType: 'application/json',
-          dialogTitle: 'Esporta storie',
-        });
+  // 🔎 Filtro per ricerca (title+body, case-insensitive)
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return stories;
+    return stories.filter((s) => {
+      const t = String(s.title || '').toLowerCase();
+      const b = String(s.body || '').toLowerCase();
+      return t.includes(q) || b.includes(q);
+    });
+  }, [stories, query]);
+
+  // ↕️ Ordinamento UI
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const { key, dir } = sort;
+      const av = a?.[key] ?? '';
+      const bv = b?.[key] ?? '';
+      let cmp = 0;
+      if (key === 'title') {
+        cmp = String(av).localeCompare(String(bv), 'it', { sensitivity: 'base' });
       } else {
-        Alert.alert('File creato', `File salvato come:\n${filename}`);
+        // createdAt/updatedAt: confronto tra ISO stringhe è stabile
+        cmp = String(av).localeCompare(String(bv));
       }
-    } catch (e) {
-      console.warn(e);
-      Alert.alert('Errore', 'Impossibile esportare in questo momento.');
-    }
-  }
+      return dir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sort]);
 
-  // --- IMPORT da file ---
-  async function handleImportFile() {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['application/json', 'text/json', 'application/*+json'],
-        multiple: false,
-        copyToCacheDirectory: true,
-      });
+  const toggleDir = () =>
+    setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }));
 
-      let pickedUri = null;
+  const setSortKey = (key) =>
+    setSort((s) => (s.key === key ? s : { ...s, key }));
 
-      if ('canceled' in res) {
-        if (res.canceled) return;
-        pickedUri = res.assets?.[0]?.uri || null;
-      } else {
-        if (res.type === 'cancel') return;
-        pickedUri = res.uri || null;
-      }
-
-      if (!pickedUri) return;
-
-      const count = await importStoriesFromFile(pickedUri);
-      await load();
-      Alert.alert('Import riuscito', `Importate ${count} storie.`);
-    } catch (e) {
-      console.warn(e);
-      Alert.alert('Errore', 'Impossibile importare in questo momento.');
-    }
-  }
-
-  async function handleCopySelected() {
-    if (!selected) return;
-    try {
-      const title = (selected.title || '').trim();
-      const body = (selected.body || '').trim();
-      const combined = title ? `${title}\n\n${body}` : body;
-      await Clipboard.setStringAsync(combined);
-      Alert.alert('Copiato 📋', 'Titolo e testo copiati negli appunti.');
-    } catch (e) {
-      console.warn(e);
-      Alert.alert('Errore', 'Impossibile copiare al momento.');
-    }
-  }
-
-  const renderItem = ({ item }) => (
+  const SortChip = ({ label, active, onPress }) => (
     <Pressable
-      onPress={() => openDetail(item)}
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+      onPress={onPress}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: active ? (colors.accent || '#ddd') : 'transparent',
+          borderColor: colors.border,
+        },
+      ]}
     >
-      <View style={styles.cardHeader}>
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-
-        <Pressable
-          onPress={() => editFromList(item)}
-          style={[styles.iconBtn, { backgroundColor: colors.accent }]}
-          accessibilityRole="button"
-          accessibilityLabel="Modifica storia"
-        >
-          <Ionicons name="create-outline" size={16} color={colors.text} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => confirmDelete(item.id)}
-          style={[styles.iconBtn, { backgroundColor: colors.accent2 || colors.accent }]}
-          accessibilityRole="button"
-          accessibilityLabel="Elimina storia"
-        >
-          <Ionicons name="trash-outline" size={16} color={colors.text} />
-        </Pressable>
-      </View>
-
-      <Text style={[styles.date, { color: colors.text }]}>{formatDate(item.createdAt)}</Text>
-      <Text style={[styles.meta, { color: colors.text }]}>
-        {countWords(item.body)} parole • {String(item.body || '').length} caratteri
-      </Text>
-      <Text style={[styles.body, { color: colors.text }]} numberOfLines={3}>{item.body}</Text>
+      <Text style={[styles.chipText, { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
 
+  const renderItem = ({ item }) => {
+    const body = String(item.body || '');
+    return (
+      <Pressable
+        onPress={() => openEditor(item)}
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+      >
+        <View style={styles.itemHeader}>
+          <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+            {item.title || 'Senza titolo'}
+          </Text>
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              onPress={() => openEditor(item)}
+              style={[styles.iconBtn, { backgroundColor: colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel="Modifica storia"
+            >
+              <Text style={{ color: colors.text, fontWeight: '800' }}>✏️</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => confirmDelete(item.id)}
+              style={[styles.iconBtn, { backgroundColor: colors.accent2 || colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel="Elimina storia"
+            >
+              <Text style={{ color: colors.text, fontWeight: '800' }}>🗑️</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <Text style={[styles.date, { color: colors.text }]}>
+          {formatDate(item.createdAt)}
+        </Text>
+
+        {/* === Contatore parole/caratteri (UI-only) === */}
+        <Text style={[styles.meta, { color: colors.text }]}>
+          {countWords(body)} parole • {body.length} caratteri
+        </Text>
+
+        <Text style={[styles.body, { color: colors.text }]} numberOfLines={3}>
+          {body}
+        </Text>
+      </Pressable>
+    );
+  };
+
   return (
-    <Page>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={[styles.header, { color: colors.text }]}>Le tue storie 📚</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Storie</Text>
+      </View>
 
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={handleImportFile}
-            style={[styles.actionBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Importa da file"
-          >
-            <Ionicons name="cloud-upload" size={16} color={colors.textOnSecondary || colors.text} />
-            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>Importa</Text>
-          </Pressable>
+      {/* 🔎 Barra ricerca + ↕️ Ordinamento */}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Cerca in titolo o testo…"
+          placeholderTextColor={colors.text + '88'}
+          style={[
+            styles.searchInput,
+            { color: colors.text, borderColor: colors.border, backgroundColor: colors.card },
+          ]}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+
+        <View style={styles.sortRow}>
+          <SortChip
+            label="Aggiornamento"
+            active={sort.key === 'updatedAt'}
+            onPress={() => setSortKey('updatedAt')}
+          />
+          <SortChip
+            label="Creazione"
+            active={sort.key === 'createdAt'}
+            onPress={() => setSortKey('createdAt')}
+          />
+          <SortChip
+            label="Titolo A→Z"
+            active={sort.key === 'title'}
+            onPress={() => setSortKey('title')}
+          />
 
           <Pressable
-            onPress={handleExportFile}
-            style={[styles.actionBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            onPress={toggleDir}
+            style={[
+              styles.dirBtn,
+              { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel="Esporta su file"
+            accessibilityLabel="Inverti ordinamento"
           >
-            <Ionicons name="download" size={16} color={colors.textOnSecondary || colors.text} />
-            <Text style={[styles.actionText, { color: colors.textOnSecondary || colors.text }]}>Esporta</Text>
+            <Text style={[styles.dirBtnText, { color: colors.text }]}>
+              {sort.dir === 'asc' ? 'ASC ↑' : 'DESC ↓'}
+            </Text>
           </Pressable>
         </View>
       </View>
 
-      {stories.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <Text style={[styles.empty, { color: colors.text }]}>
-            Nessuna storia salvata. Crea una bozza dall’Editor o genera ispirazioni dal Generatore.
+      {/* Lista */}
+      <FlatList
+        data={sorted}
+        keyExtractor={(it) => String(it.id)}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        refreshControl={
+          <RefreshControl tintColor={colors.text} refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <Text style={{ color: colors.text, opacity: 0.7, textAlign: 'center', marginTop: 24 }}>
+            Nessuna storia trovata.
           </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={stories}
-          keyExtractor={(it) => it.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 16 }}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        />
-      )}
-
-      {/* Modale di dettaglio */}
-      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={closeDetail}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {selected && (
-              <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, { color: colors.text }]}>{selected.title}</Text>
-                </View>
-                <Text style={[styles.modalDate, { color: colors.text }]}>{formatDate(selected.createdAt)}</Text>
-                <Text style={[styles.modalMeta, { color: colors.text }]}>
-                  {countWords(selected.body)} parole • {String(selected.body || '').length} caratteri
-                </Text>
-                <Text style={[styles.modalBody, { color: colors.text }]}>{selected.body}</Text>
-
-                {/* Elementi usati (sola lettura) nel dettaglio storia */}
-                <UsedElementsPanel compact />
-              </ScrollView>
-            )}
-
-            <View style={styles.modalActions}>
-              <Pressable onPress={handleCopySelected} style={[styles.btnGhost, styles.btnAction, { borderColor: colors.border }]}>
-                <Text style={[styles.btnGhostText, { color: colors.text }]}>Copia titolo+testo 📋</Text>
-              </Pressable>
-
-              <Pressable onPress={() => editFromList(selected)} style={[styles.btnAction, { backgroundColor: colors.primary }]}>
-                <Text style={{ color: colors.textOnButton, fontWeight: '700' }}>Modifica ✏️</Text>
-              </Pressable>
-
-              <Pressable onPress={() => confirmDelete(selected.id)} style={[styles.btnAction, { backgroundColor: colors.accent2 || colors.accent }]}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>Elimina 🗑️</Text>
-              </Pressable>
-
-              <Pressable onPress={closeDetail} style={[styles.btnAction, { backgroundColor: colors.secondary }]}>
-                <Text style={{ color: colors.textOnSecondary || colors.text, fontWeight: '700' }}>Chiudi</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </Page>
+        }
+        keyboardShouldPersistTaps="handled"
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // header/lista
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  header: { fontSize: 22, fontWeight: '800' },
-  headerActions: { flexDirection: 'row', gap: 8 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  title: { fontSize: ts(22), fontWeight: '800' },
 
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { fontSize: 15, opacity: 0.8, textAlign: 'center' },
+  // Search + sort
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: ts(15),
+  },
+  sortRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: { fontSize: ts(12), fontWeight: '700' },
+  dirBtn: {
+    marginLeft: 'auto',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  dirBtnText: { fontSize: ts(12), fontWeight: '800' },
 
+  // Card
   card: { borderWidth: 1, borderRadius: 16, padding: 12 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 16, fontWeight: '700' },
-  
-  // contatori
+  itemHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  itemTitle: { fontSize: ts(16), fontWeight: '700', flexShrink: 1, marginRight: 12 },
+
+  actionsRow: { flexDirection: 'row', gap: 8 },
+  iconBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+
+  date: { fontSize: ts(12), opacity: 0.8, marginTop: 2 },
+
+  // Contatore
   meta: { fontSize: 12, opacity: 0.8, marginTop: 4 },
-  modalMeta: { fontSize: 12, opacity: 0.8, marginBottom: 8 },date: { fontSize: 12, opacity: 0.7, marginTop: 2, marginBottom: 6 },
-  body: { fontSize: 14, opacity: 0.9 },
 
-  iconBtn: { padding: 8, borderRadius: 10 },
-
-  // modal
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', padding: 16, justifyContent: 'center' },
-  modalCard: { borderWidth: 1, borderRadius: 16, padding: 12, maxHeight: '88%' },
-  modalHeader: { marginBottom: 4 },
-  modalTitle: { fontSize: 18, fontWeight: '800' },
-  modalDate: { fontSize: 12, opacity: 0.7, marginBottom: 8 },
-  modalBody: { fontSize: 15, lineHeight: 22 },
-
-  modalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  btnAction: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12 },
-  btnGhost: { borderWidth: 1 },
-  btnGhostText: { fontWeight: '700' },
-
-  // azioni lista
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
-  actionText: { fontWeight: '700' },
+  body: { fontSize: ts(14), marginTop: 6 },
 });
