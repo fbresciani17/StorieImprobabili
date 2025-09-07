@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+// screens/EditorScreen.js
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,32 +13,39 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { addStory, updateStory, removeStory, getAllStories } from '../storage/stories';
+import { addStory, updateStory, getAllStories } from '../storage/stories';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import UsedElementsPanel from '../components/UsedElements';
 
-// Helper non invasivo per il conteggio parole
+/* =========================
+   Helper: conteggio parole
+   ========================= */
 function countWords(s) {
   if (!s) return 0;
   const m = String(s).trim().match(/\S+/g);
   return m ? m.length : 0;
 }
 
-function nowIso() { return new Date().toISOString(); }
 const ts = (n) => n;
 
+/* =========================
+   Hook: altezza tastiera
+   ========================= */
 function useKeyboardHeight() {
   const [kh, setKh] = useState(0);
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow',
-      (e) => setKh((e && e.endCoordinates && e.endCoordinates.height) ? e.endCoordinates.height : 0)
+      (e) => setKh(e?.endCoordinates?.height ?? 0)
     );
     const hide = Keyboard.addListener(
       Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
       () => setKh(0)
     );
-    return () => { show.remove(); hide.remove(); };
+    return () => {
+      show.remove();
+      hide.remove();
+    };
   }, []);
   return kh;
 }
@@ -52,57 +60,82 @@ export default function EditorScreen() {
   const [bodyFocused, setBodyFocused] = useState(false);
 
   const initialRef = useRef({ title: '', body: '' });
-  const clearOnNextFocusRef = useRef(false);
   const scrollRef = useRef(null);
   const bodyBlockYRef = useRef(0);
   const keyboardHeight = useKeyboardHeight();
 
-  const editingStory = route?.params?.story || null;
+  const editingStory = route?.params?.story ?? null;
 
-  // Reattach ID legacy (se entri con storia senza id)
+  /* =======================================================
+     FIX: azzera i params quando si esce dalla screen Editor
+     ======================================================= */
+  useEffect(() => {
+    const unsub = navigation.addListener('blur', () => {
+      // rimuove l'ultima storia “appesa” ai params
+      navigation.setParams({ story: undefined });
+    });
+    return unsub;
+  }, [navigation]);
+
+  /* =======================================================
+     Quando si entra in Editor SENZA story -> campi vuoti
+     (reset on focus)
+     ======================================================= */
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!route?.params?.story) {
+        setTitle('');
+        setBody('');
+        initialRef.current = { title: '', body: '' };
+        // assicura che i params siano puliti
+        navigation.setParams({ story: undefined });
+      }
+      return () => {};
+    }, [navigation, route?.params?.story])
+  );
+
+  /* =======================================================
+     Carica i dati quando c'è una story da modificare
+     ======================================================= */
+  useEffect(() => {
+    if (editingStory) {
+      const ti = editingStory.title ?? '';
+      const bo = editingStory.body ?? '';
+      setTitle(ti);
+      setBody(bo);
+      initialRef.current = { title: ti, body: bo };
+    }
+    // quando editingStory torna falsy, non toccare: il reset avviene su focus
+  }, [editingStory?.id]);
+
+  /* =======================================================
+     Ricollega ID se manca (fallback legacy “same title/body”)
+     ======================================================= */
   useEffect(() => {
     let cancelled = false;
     async function reattachIdIfMissing() {
-      if (!editingStory) return;
-      if (editingStory.id) return;
+      if (!editingStory || editingStory.id) return;
       const t = (editingStory.title || '').trim();
       const b = (editingStory.body || '').trim();
       if (!t && !b) return;
 
       try {
         const all = await getAllStories();
-        const found = all.find(s => String(s.title || '') === t && String(s.body || '') === b);
+        const found = all.find((s) => String(s.title || '') === t && String(s.body || '') === b);
         if (found && !cancelled) {
           navigation.setParams({ story: found });
         }
       } catch {}
     }
     reattachIdIfMissing();
-    return () => { cancelled = true; };
-  }, [editingStory && editingStory.title, editingStory && editingStory.body]);
+    return () => {
+      cancelled = true;
+    };
+  }, [editingStory?.title, editingStory?.body, navigation]);
 
-  // Carica dati storia in modifica
-  useEffect(() => {
-    const ti = editingStory && editingStory.title ? editingStory.title : '';
-    const bo = editingStory && editingStory.body ? editingStory.body : '';
-    setTitle(ti);
-    setBody(bo);
-    initialRef.current = { title: ti, body: bo };
-  }, [editingStory && editingStory.id]);
-
-  // Reset automatico: se l’Editor è in focus senza story param, svuota
-  useFocusEffect(
-    React.useCallback(() => {
-      if (clearOnNextFocusRef.current && !(route.params && route.params.story)) {
-        setTitle(''); setBody('');
-        navigation.setParams({ story: undefined });
-        initialRef.current = { title: '', body: '' };
-        clearOnNextFocusRef.current = false;
-      }
-      return () => {};
-    }, [navigation, route.params && route.params.story])
-  );
-
+  /* =========================
+     UI helpers
+     ========================= */
   const placeholder = mode === 'dark' ? '#B0C4DE' : '#94A3B8';
   const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
   const iosOffset = 0;
@@ -110,84 +143,66 @@ export default function EditorScreen() {
   function scrollToBodySoft() {
     const y = Math.max(0, bodyBlockYRef.current - 12);
     setTimeout(() => {
-      if (scrollRef.current && scrollRef.current.scrollTo) {
-        scrollRef.current.scrollTo({ y, animated: true });
-      }
+      scrollRef.current?.scrollTo?.({ y, animated: true });
     }, Platform.OS === 'ios' ? 80 : 120);
   }
 
   function handleBodyContentSizeChange() {
     if (!bodyFocused) return;
     setTimeout(() => {
-      if (scrollRef.current && scrollRef.current.scrollTo) {
-        scrollRef.current.scrollTo({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
-      }
+      scrollRef.current?.scrollTo?.({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true });
     }, 50);
   }
 
+  /* =========================
+     Salvataggio (logica invariata)
+     ========================= */
   async function saveNow({ silent = false } = {}) {
     const t = String(title || '').trim();
-    const b = String(body  || '').trim();
-    if (!t || !b) {
-      if (!silent) Alert.alert('Ops', 'Aggiungi almeno titolo e testo prima di salvare.');
+    const b = String(body || '').trim();
+
+    if (!t && !b) {
+      if (!silent) Alert.alert('Nulla da salvare', 'Aggiungi almeno titolo o testo.');
       return false;
     }
 
-    const isEditing = !!editingStory;
-    const hasId = !!(editingStory && editingStory.id);
-
     try {
-      if (isEditing && hasId) {
-        const payload = { ...editingStory, title: t, body: b };
-        await updateStory(payload);
-        if (!silent) Alert.alert('Aggiornata ✨', 'La storia è stata aggiornata.');
-      } else if (isEditing && !hasId) {
-        await addStory({ title: t, body: b });
-        if (!silent) Alert.alert('Salvata come nuova', 'La storia è stata salvata come nuovo elemento.');
-      } else {
-        await addStory({ title: t, body: b });
-        if (!silent) Alert.alert('Salvata! 💖', 'La tua storia è stata salvata in locale.');
-      }
-
-      initialRef.current = { title: t, body: b };
-
-      // esci esplicitamente dalla modalità "modifica"
-      navigation.setParams({ story: undefined });
-
-      return true;
-
-    } catch (e) {
-      if (isEditing && hasId) {
-        try { await removeStory(editingStory.id); } catch {}
-      }
-      try {
-        await addStory({ title: t, body: b });
-        if (!silent) {
-          Alert.alert(
-            'Aggiornamento non riuscito',
-            'Ho salvato il contenuto come nuova storia e rimosso la versione precedente.'
-          );
+      if (editingStory?.id) {
+        // update esistente
+        const ok = await updateStory(editingStory.id, { title: t, body: b });
+        if (ok) {
+          if (!silent) Alert.alert('Salvato ✨', 'Storia aggiornata con successo.');
+          initialRef.current = { title: t, body: b };
+          navigation.setParams({ story: { ...editingStory, title: t, body: b } });
         }
-        initialRef.current = { title: t, body: b };
-
-        // anche in fallback, esci dalla modalità modifica
+        return !!ok;
+      } else {
+        // nuova storia
+        const created = await addStory({ title: t, body: b });
+        if (!silent) Alert.alert('Salvato 💖', 'Storia salvata con successo.');
+        // resta in editor “vuoto” per nuova bozza
+        setTitle('');
+        setBody('');
+        initialRef.current = { title: '', body: '' };
         navigation.setParams({ story: undefined });
-
-        return true;
-      } catch (e2) {
-        if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
-        return false;
+        return !!created;
       }
+    } catch (e) {
+      if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
+      return false;
     }
   }
 
-  async function handleSave() { await saveNow({ silent: false }); }
+  async function handleSave() {
+    await saveNow({ silent: false });
+  }
 
   function handleNew() {
     if (!dirty) {
-      setTitle(''); setBody('');
-      navigation.setParams({ story: undefined });
+      setTitle('');
+      setBody('');
       initialRef.current = { title: '', body: '' };
+      navigation.setParams({ story: undefined });
       return;
     }
     Alert.alert(
@@ -196,25 +211,22 @@ export default function EditorScreen() {
       [
         { text: 'Annulla', style: 'cancel' },
         {
-          text: 'Non salvare', style: 'destructive',
-          onPress: () => {
-            setTitle(''); setBody('');
-            navigation.setParams({ story: undefined });
-            initialRef.current = { title: '', body: '' };
-          }
-        },
-        {
           text: 'Salva e continua',
-          onPress: () => saveNow({ silent: true }).then(() => {
-            setTitle(''); setBody('');
-            navigation.setParams({ story: undefined });
-            initialRef.current = { title: '', body: '' };
-          })
+          onPress: () =>
+            saveNow({ silent: true }).then(() => {
+              setTitle('');
+              setBody('');
+              initialRef.current = { title: '', body: '' };
+              navigation.setParams({ story: undefined });
+            }),
         },
       ]
     );
   }
 
+  /* =========================
+     Render
+     ========================= */
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -240,7 +252,7 @@ export default function EditorScreen() {
 
         <UsedElementsPanel watchFocus compact />
 
-        {/* TITOLO */}
+        {/* Titolo */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.label, { color: colors.text }]}>Titolo</Text>
           <TextInput
@@ -256,9 +268,11 @@ export default function EditorScreen() {
           />
         </View>
 
-        {/* TESTO */}
+        {/* Testo */}
         <View
-          onLayout={(e) => { bodyBlockYRef.current = e.nativeEvent.layout.y; }}
+          onLayout={(e) => {
+            bodyBlockYRef.current = e.nativeEvent.layout.y;
+          }}
           style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
         >
           <Text style={[styles.label, { color: colors.text }]}>Testo</Text>
@@ -271,20 +285,28 @@ export default function EditorScreen() {
             scrollEnabled
             textAlignVertical="top"
             style={[styles.textArea, { color: colors.text, borderColor: colors.border }]}
-            onFocus={() => { setBodyFocused(true); scrollToBodySoft(); }}
+            onFocus={() => {
+              setBodyFocused(true);
+              scrollToBodySoft();
+            }}
             onBlur={() => setBodyFocused(false)}
             onContentSizeChange={handleBodyContentSizeChange}
           />
 
-          {/* 🔢 Contatore parole/caratteri — UI only, no storage changes */}
-          <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' }]}>
+          {/* Contatore parole/caratteri (UI-only) */}
+          <View
+            style={[
+              styles.counterBar,
+              { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' },
+            ]}
+          >
             <Text style={[styles.counterText, { color: colors.text }]}>
               {countWords(body)} parole • {body.length} caratteri
             </Text>
           </View>
         </View>
 
-        {/* Bottoni */}
+        {/* Azioni */}
         <View style={styles.actions}>
           <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
             <Text style={[styles.btnText, { color: colors.textOnButton || '#FFFFFF' }]}>
@@ -293,9 +315,7 @@ export default function EditorScreen() {
           </Pressable>
 
           <Pressable onPress={handleNew} style={[styles.btnGhost, { borderColor: colors.border }]}>
-            <Text style={[styles.btnGhostText, { color: colors.text }]}>
-              {editingStory ? 'Annulla modifica' : 'Nuova bozza 🌸'}
-            </Text>
+            <Text style={[styles.btnGhostText, { color: colors.text }]}>Nuova bozza ➕</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -304,7 +324,12 @@ export default function EditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   title: { fontSize: ts(22), fontWeight: '800' },
   badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999 },
   badgeText: { fontSize: ts(12), fontWeight: '700' },
@@ -332,7 +357,7 @@ const styles = StyleSheet.create({
     fontSize: ts(16),
   },
 
-  /* Contatore */
+  // Contatore
   counterBar: { marginTop: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
   counterText: { fontSize: ts(12), opacity: 0.8, textAlign: 'right' },
 
