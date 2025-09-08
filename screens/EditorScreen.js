@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   BackHandler,
+  AppState, // 👈 aggiunto
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory, getAllStories } from '../storage/stories';
@@ -60,6 +61,9 @@ export default function EditorScreen() {
   const scrollRef = useRef(null);
   const bodyBlockYRef = useRef(0);
   const keyboardHeight = useKeyboardHeight();
+
+  const savingRef = useRef(false); // 👈 evita doppi salvataggi concorrenti
+  const appStateRef = useRef(AppState.currentState);
 
   const editingStory = route?.params?.story ?? null;
 
@@ -126,13 +130,16 @@ export default function EditorScreen() {
     setTimeout(() => { scrollRef.current?.scrollTo?.({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true }); }, 50);
   }
 
-  async function saveNow({ silent = false } = {}) {
+  // 👇 aggiornato: opz. keepFieldsOnCreate per non svuotare i campi nei salvataggi silenziosi
+  async function saveNow({ silent = false, keepFieldsOnCreate = false } = {}) {
+    if (savingRef.current) return true; // evita rientri
     const t = String(title || '').trim();
     const b = String(body || '').trim();
     if (!t && !b) {
       if (!silent) Alert.alert('Nulla da salvare', 'Aggiungi almeno titolo o testo.');
       return false;
     }
+    savingRef.current = true;
     try {
       if (editingStory?.id) {
         const item = await updateStory({ id: editingStory.id, title: t, body: b });
@@ -145,14 +152,23 @@ export default function EditorScreen() {
       } else {
         const created = await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvato 💖', 'Storia salvata con successo.');
-        setTitle(''); setBody('');
-        initialRef.current = { title: '', body: '' };
-        navigation.setParams({ story: undefined });
+        // 🔑 In autosave silenzioso NON svuotiamo i campi: restano per eventuale continuo editing
+        if (silent && keepFieldsOnCreate) {
+          initialRef.current = { title: t, body: b };
+          // se addStory ritorna l'oggetto, ri-aggancia l'ID per eventuale modifica successiva
+          if (created?.id) navigation.setParams({ story: created });
+        } else {
+          setTitle(''); setBody('');
+          initialRef.current = { title: '', body: '' };
+          navigation.setParams({ story: undefined });
+        }
         return !!created;
       }
     } catch {
       if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
       return false;
+    } finally {
+      savingRef.current = false;
     }
   }
 
@@ -173,7 +189,7 @@ export default function EditorScreen() {
         {
           text: 'Salva e continua',
           onPress: () =>
-            saveNow({ silent: true }).then(() => {
+            saveNow({ silent: true, keepFieldsOnCreate: true }).then(() => {
               setTitle(''); setBody('');
               initialRef.current = { title: '', body: '' };
               navigation.setParams({ story: undefined });
@@ -183,53 +199,62 @@ export default function EditorScreen() {
     );
   }
 
-  // ====== Intercetta back: beforeRemove + hardwareBackPress ======
-  const showingAlertRef = useRef(false);
+  // ====== Back hardware: lasciamo funzionare com'era (non tocco nulla) ======
   useFocusEffect(
     React.useCallback(() => {
-      const askBeforeLeave = (proceed) => {
-        if (!dirty) { proceed(); return; }
-        if (showingAlertRef.current) return;
-        showingAlertRef.current = true;
-
+      const onHardwareBack = () => {
+        if (!dirty) return false;
         Alert.alert(
           'Uscire senza salvare?',
           'Hai modifiche non salvate.',
           [
-            { text: 'Annulla', style: 'cancel', onPress: () => { showingAlertRef.current = false; } },
+            { text: 'Annulla', style: 'cancel' },
             {
               text: 'Esci senza salvare',
               style: 'destructive',
-              onPress: () => { showingAlertRef.current = false; proceed(); },
+              onPress: () => navigation.goBack(),
             },
             {
               text: 'Salva e esci',
               onPress: async () => {
-                await saveNow({ silent: true });
-                showingAlertRef.current = false;
-                proceed();
+                const ok = await saveNow({ silent: true, keepFieldsOnCreate: true });
+                if (ok) navigation.goBack();
               },
             },
           ]
         );
-      };
-
-      const unsubBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-        if (!dirty) return;
-        e.preventDefault();
-        askBeforeLeave(() => navigation.dispatch(e.data.action));
-      });
-
-      const onHardwareBack = () => {
-        if (!dirty) return false;
-        askBeforeLeave(() => navigation.goBack());
         return true;
       };
-      const backSub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
-
-      return () => { unsubBeforeRemove(); backSub.remove(); };
-    }, [navigation, dirty, title, body])
+      const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+      return () => sub.remove();
+    }, [dirty, title, body, navigation])
   );
+
+  /* ====== ✅ AUTOSAVE ROBUSTO ======
+     1) Quando l'Editor perde il focus (cambio tab / navigate): salva silenziosamente
+     2) Quando l'app va in background/inactive: salva silenziosamente
+  */
+  useEffect(() => {
+    // 1) Blur dello screen
+    const unsubBlur = navigation.addListener('blur', () => {
+      if (dirty) {
+        saveNow({ silent: true, keepFieldsOnCreate: true });
+      }
+    });
+
+    // 2) App in background/inactive
+    const appSub = AppState.addEventListener('change', (next) => {
+      if ((next === 'background' || next === 'inactive') && dirty) {
+        saveNow({ silent: true, keepFieldsOnCreate: true });
+      }
+      appStateRef.current = next;
+    });
+
+    return () => {
+      unsubBlur && unsubBlur();
+      appSub && appSub.remove();
+    };
+  }, [navigation, dirty, title, body]);
 
   return (
     <KeyboardAvoidingView
@@ -245,8 +270,6 @@ export default function EditorScreen() {
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         automaticallyAdjustKeyboardInsets
       >
-
-        {/* Piccolo badge “Modifica” (senza titolo ridondante) */}
         {editingStory ? (
           <View style={{ alignItems: 'flex-end', marginBottom: 8 }}>
             <View style={[styles.badge, { backgroundColor: colors.accent2 || colors.accent }]}>
@@ -255,10 +278,8 @@ export default function EditorScreen() {
           </View>
         ) : null}
 
-        {/* Elementi creativi di riferimento */}
         <UsedElementsPanel watchFocus compact />
 
-        {/* Titolo */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.label, { color: colors.text }]}>Titolo</Text>
           <TextInput
@@ -274,7 +295,6 @@ export default function EditorScreen() {
           />
         </View>
 
-        {/* Testo */}
         <View
           onLayout={(e) => { bodyBlockYRef.current = e.nativeEvent.layout.y; }}
           style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -294,7 +314,6 @@ export default function EditorScreen() {
             onContentSizeChange={handleBodyContentSizeChange}
           />
 
-          {/* Contatore parole/caratteri */}
           <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' }]}>
             <Text style={[styles.counterText, { color: colors.text }]}>
               {countWords(body)} parole • {body.length} caratteri
@@ -302,7 +321,6 @@ export default function EditorScreen() {
           </View>
         </View>
 
-        {/* Azioni */}
         <View style={styles.actions}>
           <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
             <Text style={[styles.btnText, { color: colors.textOnButton || '#FFFFFF' }]}>
@@ -346,7 +364,6 @@ const styles = StyleSheet.create({
     fontSize: ts(16),
   },
 
-  // Contatore
   counterBar: { marginTop: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
   counterText: { fontSize: ts(12), opacity: 0.8, textAlign: 'right' },
 
