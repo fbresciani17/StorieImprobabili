@@ -12,16 +12,12 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   BackHandler,
-  AppState, // 👈 aggiunto
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory, getAllStories } from '../storage/stories';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import UsedElementsPanel from '../components/UsedElements';
 
-/* =========================
-   Helper: conteggio parole
-   ========================= */
 function countWords(s) {
   if (!s) return 0;
   const m = String(s).trim().match(/\S+/g);
@@ -29,9 +25,6 @@ function countWords(s) {
 }
 const ts = (n) => n;
 
-/* =========================
-   Hook: altezza tastiera
-   ========================= */
 function useKeyboardHeight() {
   const [kh, setKh] = useState(0);
   useEffect(() => {
@@ -61,9 +54,6 @@ export default function EditorScreen() {
   const scrollRef = useRef(null);
   const bodyBlockYRef = useRef(0);
   const keyboardHeight = useKeyboardHeight();
-
-  const savingRef = useRef(false); // 👈 evita doppi salvataggi concorrenti
-  const appStateRef = useRef(AppState.currentState);
 
   const editingStory = route?.params?.story ?? null;
 
@@ -99,7 +89,7 @@ export default function EditorScreen() {
     }
   }, [editingStory?.id]);
 
-  // Reattach ID se manca
+  // Reattach ID se manca (casi particolari)
   useEffect(() => {
     let cancelled = false;
     async function reattachIdIfMissing() {
@@ -121,6 +111,11 @@ export default function EditorScreen() {
   const dirty = title !== initialRef.current.title || body !== initialRef.current.body;
   const iosOffset = 0;
 
+  // Espone "unsaved" ai params, così App.js lo vede
+  useEffect(() => {
+    navigation.setParams({ unsaved: dirty });
+  }, [navigation, dirty]);
+
   function scrollToBodySoft() {
     const y = Math.max(0, bodyBlockYRef.current - 12);
     setTimeout(() => { scrollRef.current?.scrollTo?.({ y, animated: true }); }, Platform.OS === 'ios' ? 80 : 120);
@@ -130,16 +125,14 @@ export default function EditorScreen() {
     setTimeout(() => { scrollRef.current?.scrollTo?.({ y: Math.max(0, bodyBlockYRef.current - 12), animated: true }); }, 50);
   }
 
-  // 👇 aggiornato: opz. keepFieldsOnCreate per non svuotare i campi nei salvataggi silenziosi
+  // Salvataggio esplicito
   async function saveNow({ silent = false, keepFieldsOnCreate = false } = {}) {
-    if (savingRef.current) return true; // evita rientri
     const t = String(title || '').trim();
     const b = String(body || '').trim();
     if (!t && !b) {
       if (!silent) Alert.alert('Nulla da salvare', 'Aggiungi almeno titolo o testo.');
       return false;
     }
-    savingRef.current = true;
     try {
       if (editingStory?.id) {
         const item = await updateStory({ id: editingStory.id, title: t, body: b });
@@ -152,10 +145,8 @@ export default function EditorScreen() {
       } else {
         const created = await addStory({ title: t, body: b });
         if (!silent) Alert.alert('Salvato 💖', 'Storia salvata con successo.');
-        // 🔑 In autosave silenzioso NON svuotiamo i campi: restano per eventuale continuo editing
         if (silent && keepFieldsOnCreate) {
           initialRef.current = { title: t, body: b };
-          // se addStory ritorna l'oggetto, ri-aggancia l'ID per eventuale modifica successiva
           if (created?.id) navigation.setParams({ story: created });
         } else {
           setTitle(''); setBody('');
@@ -167,8 +158,6 @@ export default function EditorScreen() {
     } catch {
       if (!silent) Alert.alert('Errore', 'Operazione non riuscita. Riprova.');
       return false;
-    } finally {
-      savingRef.current = false;
     }
   }
 
@@ -199,68 +188,80 @@ export default function EditorScreen() {
     );
   }
 
-  // ====== Back hardware: lasciamo funzionare com'era (non tocco nulla) ======
+  // Back hardware: alert + "Salva e esci"
   useFocusEffect(
     React.useCallback(() => {
       const onHardwareBack = () => {
         if (!dirty) return false;
         Alert.alert(
-          'Uscire senza salvare?',
-          'Hai modifiche non salvate.',
+          'Ricorda di salvare',
+          'Hai modifiche non salvate. Vuoi uscire lo stesso?',
           [
-            { text: 'Annulla', style: 'cancel' },
-            {
-              text: 'Esci senza salvare',
-              style: 'destructive',
-              onPress: () => navigation.goBack(),
-            },
+            { text: "Resta nell'editor", style: 'cancel' },
             {
               text: 'Salva e esci',
-              onPress: async () => {
-                const ok = await saveNow({ silent: true, keepFieldsOnCreate: true });
-                if (ok) navigation.goBack();
+              onPress: () => {
+                saveNow({ silent: true }).then(() => navigation.goBack());
               },
             },
+            { text: 'Esci senza salvare', style: 'destructive', onPress: () => navigation.goBack() },
           ]
         );
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
       return () => sub.remove();
-    }, [dirty, title, body, navigation])
+    }, [dirty, title, body, navigation, editingStory?.id])
   );
 
-  /* ====== ✅ AUTOSAVE ROBUSTO ======
-     1) Quando l'Editor perde il focus (cambio tab / navigate): salva silenziosamente
-     2) Quando l'app va in background/inactive: salva silenziosamente
-  */
+  // Blocca uscita con navigate/pop (stack)
   useEffect(() => {
-    // 1) Blur dello screen
-    const unsubBlur = navigation.addListener('blur', () => {
-      if (dirty) {
-        saveNow({ silent: true, keepFieldsOnCreate: true });
-      }
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      if (!dirty) return;
+      e.preventDefault();
+      Alert.alert(
+        'Ricorda di salvare',
+        'Hai modifiche non salvate. Vuoi uscire lo stesso?',
+        [
+          { text: "Resta nell'editor", style: 'cancel' },
+          {
+            text: 'Salva e esci',
+            onPress: () => {
+              saveNow({ silent: true }).then(() => navigation.dispatch(e.data.action));
+            },
+          },
+          { text: 'Esci senza salvare', style: 'destructive', onPress: () => navigation.dispatch(e.data.action) },
+        ]
+      );
     });
+    return sub;
+  }, [navigation, dirty, title, body, editingStory?.id]);
 
-    // 2) App in background/inactive
-    const appSub = AppState.addEventListener('change', (next) => {
-      if ((next === 'background' || next === 'inactive') && dirty) {
-        saveNow({ silent: true, keepFieldsOnCreate: true });
+  // ✅ Trigger "Salva e vai" inviato dal TabNavigator in App.js
+  useEffect(() => {
+    const targetTab = route?.params?.__saveThenGoTo;
+    const nonce = route?.params?.__nonce;
+    if (!targetTab || !nonce) return;
+
+    // pulisci subito il nonce per evitare doppie esecuzioni
+    navigation.setParams({ __nonce: undefined });
+
+    // salva e poi vai al tab richiesto
+    (async () => {
+      await saveNow({ silent: true });
+      const tabNav = navigation.getParent?.('MainTabs') || navigation.getParent?.();
+      if (tabNav && targetTab) {
+        tabNav.navigate(targetTab);
       }
-      appStateRef.current = next;
-    });
-
-    return () => {
-      unsubBlur && unsubBlur();
-      appSub && appSub.remove();
-    };
-  }, [navigation, dirty, title, body]);
+      // pulisci il flag
+      navigation.setParams({ __saveThenGoTo: undefined });
+    })();
+  }, [route?.params?.__nonce]);
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? iosOffset : 0}
     >
       <ScrollView
         ref={scrollRef}
@@ -286,7 +287,7 @@ export default function EditorScreen() {
             value={title}
             onChangeText={setTitle}
             placeholder="Inserisci il titolo"
-            placeholderTextColor={placeholder}
+            placeholderTextColor={mode === 'dark' ? '#B0C4DE' : '#94A3B8'}
             style={[styles.input, { color: colors.text, borderColor: colors.border }]}
             autoCorrect={false}
             autoCapitalize="sentences"
@@ -304,7 +305,7 @@ export default function EditorScreen() {
             value={body}
             onChangeText={setBody}
             placeholder="Scrivi qui la tua storia"
-            placeholderTextColor={placeholder}
+            placeholderTextColor={mode === 'dark' ? '#B0C4DE' : '#94A3B8'}
             multiline
             scrollEnabled
             textAlignVertical="top"
@@ -367,9 +368,9 @@ const styles = StyleSheet.create({
   counterBar: { marginTop: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 },
   counterText: { fontSize: ts(12), opacity: 0.8, textAlign: 'right' },
 
-  actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 4 },
-  btn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14 },
+  actions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 4 },
+  btn: { flexGrow: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, minWidth: 140, marginBottom: 8 },
   btnText: { fontSize: ts(16), fontWeight: '700' },
-  btnGhost: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1 },
+  btnGhost: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
   btnGhostText: { fontSize: ts(16), fontWeight: '600' },
 });
