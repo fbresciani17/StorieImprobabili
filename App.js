@@ -20,7 +20,6 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <NavigationContainer theme={navThemeFor(mode)}>
         <Tab.Navigator
           id="MainTabs"
           // 👇 intercettiamo il cambio tab qui (senza usare emit)
