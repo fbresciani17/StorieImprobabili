@@ -62,7 +62,7 @@ export default function UsedElementsPanel({
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (watchFocus && isFocused) load(); }, [watchFocus, isFocused, load]);
 
-  const headerTitle = title || 'Elementi usati (solo lettura)';
+  const headerTitle = title || 'Elementi usati';
 
   if (!last || !Object.keys(last).length) {
     return (
@@ -106,7 +106,7 @@ export default function UsedElementsPanel({
           <View style={{ maxHeight }}>
             <ScrollView
               style={{}}
-              contentContainerStyle={{ gap: compact ? 6 : 8, paddingTop: 4 }}
+              contentContainerStyle={{ gap: compact ? 6 : 8, paddingTop: 8 }}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
             >
@@ -122,7 +122,7 @@ export default function UsedElementsPanel({
   return (
     <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       <Text style={[compact ? styles.titleSm : styles.title, { color: colors.text }]}>{headerTitle}</Text>
-      <View style={{ gap: compact ? 6 : 8 }}>
+      <View style={{ gap: compact ? 6 : 8, marginTop: 8 }}>
         {keys.map((k) => <Row key={k} k={k} />)}
       </View>
     </View>

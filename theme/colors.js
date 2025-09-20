@@ -9,6 +9,7 @@ export const lightColors = {
   secondary: '#FFD3A5',      // giallo pastello per il pulsante "scrivi la tua storia"
   accent: '#FFA8A8',         // rosa pastello per il pulsante pulisci
   accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto"
+  counter: '#F5E1E8',        // rosa molto chiaro per il counter parole
 
   text: '#1F2937',           // grigio-blu profondo (ottima leggibilità)
   textOnButton: '#1F2937',   // testo scuro su bottoni gialli per migliore leggibilità
@@ -29,6 +30,7 @@ export const darkColors = {
   secondary: '#FFD3A5',       // Giallo pastello per il pulsante "scrivi la tua storia" (anche in modalità notte)
   accent: '#FFA8A8',          // Rosa pastello per il pulsante pulisci (anche in modalità notte)
   accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto" (anche in modalità notte)
+  counter: '#F5E1E8',        // rosa molto chiaro per il counter parole (anche in modalità notte)
 
   text: '#FFFFFF',            // Testo primario
   textOnButton: '#1A2238',    // Testo scuro su bottoni gialli per migliore leggibilità

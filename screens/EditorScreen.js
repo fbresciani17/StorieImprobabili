@@ -315,7 +315,7 @@ export default function EditorScreen() {
             onContentSizeChange={handleBodyContentSizeChange}
           />
 
-          <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.secondary || 'transparent' }]}>
+          <View style={[styles.counterBar, { borderColor: colors.border, backgroundColor: colors.counter || 'transparent' }]}>
             <Text style={[styles.counterText, { color: colors.text }]}>
               {countWords(body)} parole • {body.length} caratteri
             </Text>
