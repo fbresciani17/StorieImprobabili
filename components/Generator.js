@@ -133,8 +133,8 @@ export default function Generator({ onGoToEditor }) {
           <Text style={[styles.btnText, { color: colors.textOnButton || '#fff' }]}>{'Genera 🎲'}</Text>
         </Pressable>
 
-        <Pressable onPress={clearAll} style={[styles.btnGhost, { borderColor: colors.border }]}>
-          <Text style={[styles.btnGhostText, { color: colors.text }]}>{'Pulisci ✨'}</Text>
+        <Pressable onPress={clearAll} style={[styles.btn, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.btnText, { color: '#FFFFFF' }]}>{'Pulisci ✨'}</Text>
         </Pressable>
 
         {onGoToEditor ? (

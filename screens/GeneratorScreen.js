@@ -133,7 +133,7 @@ export default function GeneratorScreen({ navigation }) {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.primary }]}>Storie Improbabili</Text>
+        <Text style={[styles.title, { color: '#6B46C1', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }]}>Storie Improbabili</Text>
         <Text style={[styles.subtitle, { color: colors.text }]}>Generatore di elementi narrativi</Text>
       </View>
 
@@ -174,12 +174,12 @@ export default function GeneratorScreen({ navigation }) {
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Genera 🎲</Text>
         </Pressable>
 
-        <Pressable onPress={clearAll} style={[styles.btnGhost, { borderColor: colors.border }]}>
-          <Text style={[styles.btnGhostText, { color: colors.text }]}>Pulisci ✨</Text>
+        <Pressable onPress={clearAll} style={[styles.btn, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Pulisci ✨</Text>
         </Pressable>
 
-        <Pressable onPress={unlockAll} style={[styles.btnGhost, { borderColor: colors.border }]}>
-          <Text style={[styles.btnGhostText, { color: colors.text }]}>Sblocca tutto 🔓</Text>
+        <Pressable onPress={unlockAll} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
+          <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Sblocca tutto 🔓</Text>
         </Pressable>
 
         <Pressable onPress={() => navigation.navigate('Editor')} style={[styles.btn, { backgroundColor: colors.secondary }]}>
@@ -193,8 +193,8 @@ export default function GeneratorScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, padding: 16 },
   header: { marginBottom: 8 },
-  title: { fontSize: 22, fontWeight: '800', marginBottom: 6 },
-  subtitle: { fontSize: 14, opacity: 0.8 },
+  title: { fontSize: 28, fontWeight: '900', marginBottom: 8, fontFamily: 'Georgia', letterSpacing: 0.5 },
+  subtitle: { fontSize: 16, opacity: 0.9, fontStyle: 'italic', letterSpacing: 0.3, fontFamily: 'Georgia' },
   selector: { marginTop: 4, marginBottom: 8 },
   selectorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
   chips: { flexDirection: 'row', gap: 8 },

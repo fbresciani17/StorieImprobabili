@@ -3,15 +3,15 @@ export const lightColors = {
   mode: 'light',
 
   // 🌤️ Palette Giorno (blu/azzurri funzionali)
-  background: '#F4F9FF',     // azzurro chiarissimo per lo sfondo generale
-  card: '#FFFFFF',           // carte, superfici principali
-  primary: '#3A86FF',        // blu azione principale (ottimo contrasto con bianco)
-  secondary: '#D6E8FF',      // azzurro molto chiaro per header/tab/card secondarie
-  accent: '#38BDF8',         // azzurro sky per azioni secondarie / stati
-  accent2: '#B6E0FE',        // azzurro pastello per highlight/badge
+  background: '#F5F1EB',     // marroncino molto chiaro per lo sfondo generale
+  card: '#F9F5F0',           // marroncino più chiaro per le card degli elementi
+  primary: '#A8E6CF',        // verde pastello per il pulsante genera
+  secondary: '#FFD3A5',      // giallo pastello per il pulsante "scrivi la tua storia"
+  accent: '#FFA8A8',         // rosa pastello per il pulsante pulisci
+  accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto"
 
   text: '#1F2937',           // grigio-blu profondo (ottima leggibilità)
-  textOnButton: '#FFFFFF',   // testo su bottoni primari
+  textOnButton: '#1F2937',   // testo scuro su bottoni gialli per migliore leggibilità
   textOnSecondary: '#0F172A',// testo su bottoni secondari (su azzurro chiaro)
 
   border: '#D7E3F4',         // bordi delicati coerenti con la palette
@@ -23,15 +23,15 @@ export const darkColors = {
   mode: 'dark',
 
   // 🌙 Palette Notte (come da tua preferenza)
-  background: '#1A2238',      // Blu notte profondo
-  card: '#2E3268',            // Blu lavanda scuro (card / sfondi secondari)
-  primary: '#87CEEB',         // Azzurro tenue (primario notte)
-  secondary: '#40E0D0',       // Turchese morbido (secondario)
-  accent: '#40E0D0',          // Turchese (accento)
-  accent2: '#40E0D0',
+  background: '#2D1B1B',      // Marrone scuro per la modalità notte
+  card: '#3D2A2A',            // Marrone più chiaro per le card in modalità notte
+  primary: '#A8E6CF',         // Verde pastello per il pulsante genera (anche in modalità notte)
+  secondary: '#FFD3A5',       // Giallo pastello per il pulsante "scrivi la tua storia" (anche in modalità notte)
+  accent: '#FFA8A8',          // Rosa pastello per il pulsante pulisci (anche in modalità notte)
+  accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto" (anche in modalità notte)
 
   text: '#FFFFFF',            // Testo primario
-  textOnButton: '#1A2238',    // Testo su bottoni chiari (primario/secondario in dark)
+  textOnButton: '#1A2238',    // Testo scuro su bottoni gialli per migliore leggibilità
   textOnSecondary: '#1A2238',
 
   border: '#3B4A7A',
