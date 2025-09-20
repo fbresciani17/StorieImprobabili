@@ -329,8 +329,8 @@ export default function EditorScreen() {
             </Text>
           </Pressable>
 
-          <Pressable onPress={handleNew} style={[styles.btnGhost, { borderColor: colors.border }]}>
-            <Text style={[styles.btnGhostText, { color: colors.text }]}>Nuova bozza ➕</Text>
+          <Pressable onPress={handleNew} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
+            <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Nuova bozza ➕</Text>
           </Pressable>
         </View>
       </ScrollView>

@@ -4,7 +4,7 @@ export const lightColors = {
 
   // 🌤️ Palette Giorno (blu/azzurri funzionali)
   background: '#F5F1EB',     // marroncino molto chiaro per lo sfondo generale
-  card: '#F9F5F0',           // marroncino più chiaro per le card degli elementi
+  card: '#F9F7F4',           // marrone molto chiaro per le card degli elementi
   primary: '#A8E6CF',        // verde pastello per il pulsante genera
   secondary: '#FFD3A5',      // giallo pastello per il pulsante "scrivi la tua storia"
   accent: '#FFA8A8',         // rosa pastello per il pulsante pulisci
@@ -24,7 +24,7 @@ export const darkColors = {
 
   // 🌙 Palette Notte (come da tua preferenza)
   background: '#2D1B1B',      // Marrone scuro per la modalità notte
-  card: '#3D2A2A',            // Marrone più chiaro per le card in modalità notte
+  card: '#3A2F2A',            // Marrone molto chiaro per le card in modalità notte
   primary: '#A8E6CF',         // Verde pastello per il pulsante genera (anche in modalità notte)
   secondary: '#FFD3A5',       // Giallo pastello per il pulsante "scrivi la tua storia" (anche in modalità notte)
   accent: '#FFA8A8',          // Rosa pastello per il pulsante pulisci (anche in modalità notte)

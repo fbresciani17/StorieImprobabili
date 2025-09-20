@@ -130,21 +130,21 @@ export default function UsedElementsPanel({
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 14, padding: 10, marginTop: 8 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 8, marginTop: 6 },
   emptyCard: { borderStyle: 'dashed' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 2 },
-  icon: { width: 20, fontSize: 16, textAlign: 'center' },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 1 },
+  icon: { width: 18, fontSize: 14, textAlign: 'center' },
 
-  title: { fontSize: 15, fontWeight: '800' },
-  titleSm: { fontSize: 13, fontWeight: '800' },
+  title: { fontSize: 14, fontWeight: '800' },
+  titleSm: { fontSize: 12, fontWeight: '800' },
 
-  key: { width: 100, fontSize: 13, fontWeight: '700' },
-  keySm: { width: 96, fontSize: 12, fontWeight: '700' },
+  key: { width: 100, fontSize: 12, fontWeight: '700' },
+  keySm: { width: 96, fontSize: 11, fontWeight: '700' },
 
-  val: { flex: 1, fontSize: 13, opacity: 0.9 },
-  valSm: { flex: 1, fontSize: 12, opacity: 0.9 },
+  val: { flex: 1, fontSize: 12, opacity: 0.9 },
+  valSm: { flex: 1, fontSize: 11, opacity: 0.9 },
 
   emptyText: { fontSize: 12, opacity: 0.8, marginTop: 4 },
   emptyTextSm: { fontSize: 11, opacity: 0.8, marginTop: 4 },
