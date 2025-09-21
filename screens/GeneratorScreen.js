@@ -4,6 +4,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { elements } from '../data/elements_it';
 import { Ionicons } from '@expo/vector-icons';
 import { setLastElements } from '../storage/lastElements';
+import AnimatedButton from '../components/AnimatedButton';
 
 const ORDER = [
   { key: 'characters', icon: '👤', label: 'Personaggi' },
@@ -71,18 +72,18 @@ export default function GeneratorScreen({ navigation }) {
   async function unlockAll() {
     setLocks({});
     
-    // Rigenera tutti gli elementi visibili
-    const newValues = {};
-    const limit = Math.min(count, visibleOrder.length);
+    // Mantieni i valori esistenti, sblocca solo i lucchetti
+    const currentValues = { ...values };
     
+    // Salva solo gli elementi visibili per l'editor
+    const visibleValues = {};
+    const limit = Math.min(count, visibleOrder.length);
     for (let i = 0; i < limit; i++) {
       const item = visibleOrder[i];
-      newValues[item.key] = randomPick(elements[item.key]);
+      visibleValues[item.key] = currentValues[item.key] || '';
     }
     
-    // Sostituisci completamente i valori con solo quelli visibili
-    setValues(newValues);
-    await setLastElements(newValues);
+    await setLastElements(visibleValues);
   }
 
   async function toggleLock(key) {
@@ -117,7 +118,7 @@ export default function GeneratorScreen({ navigation }) {
           <Text style={[styles.label, { color: colors.text }]}>{item.label}</Text>
           <Text style={[styles.value, { color: colors.text }]}>{value || '—'}</Text>
         </View>
-        <Pressable
+        <AnimatedButton
           onPress={() => toggleLock(item.key)}
           style={[styles.lockBtn, { backgroundColor: locked ? colors.accent : colors.primary }]}
         >
@@ -126,7 +127,7 @@ export default function GeneratorScreen({ navigation }) {
             size={18} 
             color={locked ? '#FFFFFF' : colors.text} 
           />
-        </Pressable>
+        </AnimatedButton>
       </View>
     );
   };
@@ -143,7 +144,7 @@ export default function GeneratorScreen({ navigation }) {
         <Text style={[styles.selectorLabel, { color: colors.text }]}>Quanti elementi?</Text>
         <View style={styles.chips}>
           {[2, 3, 4, 5, 6].map((n) => (
-            <Pressable
+            <AnimatedButton
               key={n}
               onPress={() => setCount(n)}
               style={[
@@ -155,7 +156,7 @@ export default function GeneratorScreen({ navigation }) {
               ]}
             >
               <Text style={[styles.chipText, { color: colors.text }]}>{n}</Text>
-            </Pressable>
+            </AnimatedButton>
           ))}
         </View>
         <Text style={[styles.selectorHint, { color: colors.text }]}>
@@ -171,19 +172,19 @@ export default function GeneratorScreen({ navigation }) {
       />
 
       <View style={styles.actions}>
-        <Pressable onPress={rollAll} style={[styles.btn, { backgroundColor: colors.primary }]}>
+        <AnimatedButton onPress={rollAll} style={[styles.btn, { backgroundColor: colors.primary }]}>
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Genera 🎲</Text>
-        </Pressable>
+        </AnimatedButton>
 
-        <Pressable onPress={clearAll} style={[styles.btn, { backgroundColor: colors.accent }]}>
+        <AnimatedButton onPress={clearAll} style={[styles.btn, { backgroundColor: colors.accent }]}>
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Pulisci ✨</Text>
-        </Pressable>
+        </AnimatedButton>
 
-        <Pressable onPress={unlockAll} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
+        <AnimatedButton onPress={unlockAll} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Sblocca tutto 🔓</Text>
-        </Pressable>
+        </AnimatedButton>
 
-        <Pressable 
+        <AnimatedButton 
           onPress={async () => {
             // Salva solo gli elementi visibili prima di navigare
             const visibleValues = {};
@@ -198,7 +199,7 @@ export default function GeneratorScreen({ navigation }) {
           style={[styles.btn, { backgroundColor: colors.secondary }]}
         >
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Scrivi la tua storia ✏️</Text>
-        </Pressable>
+        </AnimatedButton>
       </View>
     </View>
   );

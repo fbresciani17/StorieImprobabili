@@ -17,6 +17,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { addStory, updateStory, getAllStories } from '../storage/stories';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import UsedElementsPanel from '../components/UsedElements';
+import AnimatedButton from '../components/AnimatedButton';
 
 function countWords(s) {
   if (!s) return 0;
@@ -323,15 +324,15 @@ export default function EditorScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
+          <AnimatedButton onPress={handleSave} style={[styles.btn, { backgroundColor: colors.primary }]}>
             <Text style={[styles.btnText, { color: colors.textOnButton || '#FFFFFF' }]}>
               {editingStory ? 'Aggiorna ✨' : 'Salva 💖'}
             </Text>
-          </Pressable>
+          </AnimatedButton>
 
-          <Pressable onPress={handleNew} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
+          <AnimatedButton onPress={handleNew} style={[styles.btn, { backgroundColor: colors.accent2 }]}>
             <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Nuova bozza ➕</Text>
-          </Pressable>
+          </AnimatedButton>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

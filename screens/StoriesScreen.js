@@ -20,6 +20,7 @@ import {
   removeStory,
   addStory, // per fallback import
 } from '../storage/stories';
+import AnimatedButton from '../components/AnimatedButton';
 import UsedElementsPanel from '../components/UsedElements';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
@@ -137,7 +138,7 @@ export default function StoriesScreen() {
   const setSortKey = (key) => setSort((s) => (s.key === key ? s : { ...s, key }));
 
   const SortChip = ({ label, active, onPress }) => (
-    <Pressable
+    <AnimatedButton
       onPress={onPress}
       style={[
         styles.chip,
@@ -148,7 +149,7 @@ export default function StoriesScreen() {
       ]}
     >
       <Text style={[styles.chipText, { color: active ? '#FFFFFF' : colors.text }]}>{label}</Text>
-    </Pressable>
+    </AnimatedButton>
   );
 
   const renderItem = ({ item }) => {
@@ -164,22 +165,22 @@ export default function StoriesScreen() {
           </Text>
 
           <View style={styles.actionsRow}>
-            <Pressable
+            <AnimatedButton
               onPress={() => openEditor(item)}
               style={[styles.iconBtn, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
               accessibilityLabel="Modifica storia"
             >
               <Text style={{ color: colors.textOnButton || '#FFFFFF', fontWeight: '800' }}>✏️</Text>
-            </Pressable>
-            <Pressable
+            </AnimatedButton>
+            <AnimatedButton
               onPress={() => confirmDelete(item.id)}
               style={[styles.iconBtn, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
               accessibilityLabel="Elimina storia"
             >
               <Text style={{ color: colors.textOnButton || '#FFFFFF', fontWeight: '800' }}>🗑️</Text>
-            </Pressable>
+            </AnimatedButton>
           </View>
         </View>
 
@@ -268,22 +269,22 @@ export default function StoriesScreen() {
       <View style={styles.topToolsRow}>
         <View style={{ flex: 1 }} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable
+          <AnimatedButton
             onPress={doImportFromFile}
             style={[styles.toolsBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
             accessibilityRole="button"
             accessibilityLabel="Importa da file"
           >
             <Text style={[styles.toolsBtnText, { color: colors.text }]}>📥</Text>
-          </Pressable>
-          <Pressable
+          </AnimatedButton>
+          <AnimatedButton
             onPress={doExportToFile}
             style={[styles.toolsBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
             accessibilityRole="button"
             accessibilityLabel="Esporta su file"
           >
             <Text style={[styles.toolsBtnText, { color: colors.text }]}>📤</Text>
-          </Pressable>
+          </AnimatedButton>
         </View>
       </View>
 
@@ -309,7 +310,7 @@ export default function StoriesScreen() {
           <SortChip label="Creazione" active={sort.key === 'createdAt'} onPress={() => setSortKey('createdAt')} />
           <SortChip label="Titolo A→Z" active={sort.key === 'title'} onPress={() => setSortKey('title')} />
 
-          <Pressable
+          <AnimatedButton
             onPress={toggleDir}
             style={[
               styles.dirBtn,
@@ -321,7 +322,7 @@ export default function StoriesScreen() {
             <Text style={[styles.dirBtnText, { color: colors.text }]}>
               {sort.dir === 'asc' ? 'ASC ↑' : 'DESC ↓'}
             </Text>
-          </Pressable>
+          </AnimatedButton>
         </View>
       </View>
 
@@ -349,9 +350,9 @@ export default function StoriesScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]} numberOfLines={2}>
                 {preview?.title || 'Senza titolo'}
               </Text>
-              <Pressable onPress={() => setPreview(null)} style={[styles.closeBtn, { borderColor: colors.border }]}>
+              <AnimatedButton onPress={() => setPreview(null)} style={[styles.closeBtn, { borderColor: colors.border }]}>
                 <Text style={{ color: colors.text, fontWeight: '800' }}>✕</Text>
-              </Pressable>
+              </AnimatedButton>
             </View>
 
             <Text style={[styles.modalDate, { color: colors.text }]}>{formatDate(preview?.createdAt)}</Text>
@@ -369,20 +370,20 @@ export default function StoriesScreen() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <Pressable onPress={copyStory} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
+              <AnimatedButton onPress={copyStory} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
                 <Text style={[styles.modalBtnText, { color: colors.textOnButton || '#FFFFFF' }]}>
                   Copia 📋
                 </Text>
-              </Pressable>
-              <Pressable onPress={() => openEditor(preview)} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
+              </AnimatedButton>
+              <AnimatedButton onPress={() => openEditor(preview)} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
                 <Text style={[styles.modalBtnText, { color: colors.textOnButton || '#FFFFFF' }]}>Modifica ✏️</Text>
-              </Pressable>
-              <Pressable
+              </AnimatedButton>
+              <AnimatedButton
                 onPress={() => confirmDelete(preview.id)}
                 style={[styles.modalBtnGhost, { backgroundColor: colors.accent, borderColor: colors.accent }]}
               >
                 <Text style={[styles.modalBtnGhostText, { color: colors.textOnButton || '#FFFFFF' }]}>Elimina 🗑️</Text>
-              </Pressable>
+              </AnimatedButton>
             </View>
           </View>
         </View>
