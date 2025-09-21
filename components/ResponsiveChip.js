@@ -1,19 +1,19 @@
-// components/AnimatedButton.js
+// components/ResponsiveChip.js
 import React, { useRef } from 'react';
-import { Pressable, Animated } from 'react-native';
+import { Pressable, Text, Animated } from 'react-native';
 
-export default function AnimatedButton({ 
+export default function ResponsiveChip({ 
   children, 
   onPress, 
   style, 
-  disabled = false,
+  colors,
   ...props 
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     Animated.timing(scaleAnim, {
-      toValue: 0.95,
+      toValue: 0.9,
       duration: 100,
       useNativeDriver: true,
     }).start();
@@ -28,13 +28,13 @@ export default function AnimatedButton({
   };
 
   return (
-    <Animated.View style={[{ flex: 1 }, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={[{ transform: [{ scale: scaleAnim }] }, style]}>
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        disabled={disabled}
-        style={[style, { alignItems: 'center', justifyContent: 'center' }]}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        android_ripple={{ color: colors.primary, radius: 20 }}
         {...props}
       >
         {children}

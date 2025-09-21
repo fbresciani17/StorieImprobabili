@@ -5,6 +5,9 @@ import { elements } from '../data/elements_it';
 import { Ionicons } from '@expo/vector-icons';
 import { setLastElements } from '../storage/lastElements';
 import AnimatedButton from '../components/AnimatedButton';
+import AnimatedElement from '../components/AnimatedElement';
+import AnimatedElementList from '../components/AnimatedElementList';
+import PulseButton from '../components/PulseButton';
 
 const ORDER = [
   { key: 'characters', icon: '👤', label: 'Personaggi' },
@@ -24,6 +27,7 @@ export default function GeneratorScreen({ navigation }) {
   const [count, setCount] = useState(2);
   const [values, setValues] = useState({});
   const [locks, setLocks] = useState({});
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const visibleOrder = useMemo(() => {
     return ORDER.filter(item => elements[item.key] && elements[item.key].length > 0).slice(0, count);
@@ -42,6 +46,11 @@ export default function GeneratorScreen({ navigation }) {
   }, [count]);
 
   async function rollAll() {
+    setIsGenerating(true);
+    
+    // Simula un piccolo delay per l'effetto pulse
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
     const newValues = {};
     const limit = Math.min(count, visibleOrder.length);
     
@@ -60,6 +69,8 @@ export default function GeneratorScreen({ navigation }) {
     
     // Salva solo gli elementi visibili per l'editor
     await setLastElements(newValues);
+    
+    setIsGenerating(false);
   }
 
   async function clearAll() {
@@ -112,23 +123,14 @@ export default function GeneratorScreen({ navigation }) {
     const value = values[item.key] || '';
     
     return (
-      <View style={[styles.item, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={styles.icon}>{item.icon}</Text>
-        <View style={styles.content}>
-          <Text style={[styles.label, { color: colors.text }]}>{item.label}</Text>
-          <Text style={[styles.value, { color: colors.text }]}>{value || '—'}</Text>
-        </View>
-        <AnimatedButton
-          onPress={() => toggleLock(item.key)}
-          style={[styles.lockBtn, { backgroundColor: locked ? colors.accent : colors.primary }]}
-        >
-          <Ionicons 
-            name={locked ? 'lock-closed' : 'lock-open'} 
-            size={18} 
-            color={locked ? '#FFFFFF' : colors.text} 
-          />
-        </AnimatedButton>
-      </View>
+      <AnimatedElement
+        item={item}
+        value={value}
+        locked={locked}
+        colors={colors}
+        onToggleLock={toggleLock}
+        styles={styles}
+      />
     );
   };
 
@@ -144,7 +146,7 @@ export default function GeneratorScreen({ navigation }) {
         <Text style={[styles.selectorLabel, { color: colors.text }]}>Quanti elementi?</Text>
         <View style={styles.chips}>
           {[2, 3, 4, 5, 6].map((n) => (
-            <AnimatedButton
+            <Pressable
               key={n}
               onPress={() => setCount(n)}
               style={[
@@ -154,9 +156,10 @@ export default function GeneratorScreen({ navigation }) {
                   backgroundColor: n === count ? colors.accent : 'transparent',
                 },
               ]}
+              android_ripple={{ color: colors.primary, radius: 20 }}
             >
               <Text style={[styles.chipText, { color: colors.text }]}>{n}</Text>
-            </AnimatedButton>
+            </Pressable>
           ))}
         </View>
         <Text style={[styles.selectorHint, { color: colors.text }]}>
@@ -172,9 +175,13 @@ export default function GeneratorScreen({ navigation }) {
       />
 
       <View style={styles.actions}>
-        <AnimatedButton onPress={rollAll} style={[styles.btn, { backgroundColor: colors.primary }]}>
+        <PulseButton 
+          onPress={rollAll} 
+          style={[styles.btn, { backgroundColor: colors.primary }]}
+          isGenerating={isGenerating}
+        >
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Genera 🎲</Text>
-        </AnimatedButton>
+        </PulseButton>
 
         <AnimatedButton onPress={clearAll} style={[styles.btn, { backgroundColor: colors.accent }]}>
           <Text style={[styles.btnText, { color: '#FFFFFF' }]}>Pulisci ✨</Text>
@@ -219,8 +226,16 @@ const styles = StyleSheet.create({
   selector: { marginTop: 4, marginBottom: 8 },
   selectorLabel: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
   chips: { flexDirection: 'row', gap: 8 },
-  chip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1 },
-  chipText: { fontSize: 14, fontWeight: '700' },
+  chip: { 
+    paddingVertical: 10, 
+    paddingHorizontal: 24, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  chipText: { fontSize: 18, fontWeight: '700' },
   selectorHint: { fontSize: 12, opacity: 0.7, marginTop: 4, fontStyle: 'italic' },
   item: { 
     borderWidth: 1, 
@@ -243,18 +258,14 @@ const styles = StyleSheet.create({
   },
   actions: { 
     flexDirection: 'row', 
-    gap: 10, 
-    justifyContent: 'space-between', 
-    flexWrap: 'wrap', 
+    gap: 8, 
     marginTop: 4 
   },
   btn: { 
-    flexGrow: 1, 
     alignItems: 'center', 
     justifyContent: 'center', 
     paddingVertical: 14, 
     borderRadius: 14,
-    minWidth: 140,
     marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
