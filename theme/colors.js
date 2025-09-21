@@ -24,19 +24,19 @@ export const darkColors = {
   mode: 'dark',
 
   // 🌙 Palette Notte (come da tua preferenza)
-  background: '#2D1B1B',      // Marrone scuro per la modalità notte
-  card: '#3A2F2A',            // Marrone molto chiaro per le card in modalità notte
-  primary: '#A8E6CF',         // Verde pastello per il pulsante genera (anche in modalità notte)
-  secondary: '#FFD3A5',       // Giallo pastello per il pulsante "scrivi la tua storia" (anche in modalità notte)
-  accent: '#FFA8A8',          // Rosa pastello per il pulsante pulisci (anche in modalità notte)
-  accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto" (anche in modalità notte)
+  background: '#1A1F2E',      // Blu scuro per la modalità notte
+  card: '#2A3441',            // Blu più chiaro per le card in modalità notte
+  primary: '#6EE7B7',         // Verde tenue per il pulsante genera (modalità notte)
+  secondary: '#FDE68A',       // Giallo delicato per il pulsante "scrivi la tua storia" (modalità notte)
+  accent: '#F9A8D4',          // Rosa dolce per il pulsante pulisci (modalità notte)
+  accent2: '#93C5FD',        // Azzurro soft per il pulsante "sblocca tutto" (modalità notte)
   counter: '#F5E1E8',        // rosa molto chiaro per il counter parole (anche in modalità notte)
 
   text: '#FFFFFF',            // Testo primario
   textOnButton: '#FFFFFF',    // Testo bianco su bottoni colorati per migliore leggibilità
   textOnSecondary: '#1A2238',
 
-  border: '#3B4A7A',
+  border: '#3A4A5C',
   tabActive: '#87CEEB',
   tabInactive: '#B0C4DE',
 };
