@@ -6,6 +6,7 @@ export const lightColors = {
   background: '#F5F1EB',     // marroncino molto chiaro per lo sfondo generale
   card: '#F9F7F4',           // marrone molto chiaro per le card degli elementi
   primary: '#A8E6CF',        // verde pastello per il pulsante genera
+  title: '#FFB3B3',          // rosso tenue per il titolo
   secondary: '#FFD3A5',      // giallo pastello per il pulsante "scrivi la tua storia"
   accent: '#FFA8A8',         // rosa pastello per il pulsante pulisci
   accent2: '#A8D8EA',        // azzurro pastello per il pulsante "sblocca tutto"
@@ -23,20 +24,21 @@ export const lightColors = {
 export const darkColors = {
   mode: 'dark',
 
-  // 🌙 Palette Notte (come da tua preferenza)
+  // 🌙 Palette Notte (tutte tonalità di blu)
   background: '#1A1F2E',      // Blu scuro per la modalità notte
   card: '#2A3441',            // Blu più chiaro per le card in modalità notte
-  primary: '#6EE7B7',         // Verde tenue per il pulsante genera (modalità notte)
-  secondary: '#FDE68A',       // Giallo delicato per il pulsante "scrivi la tua storia" (modalità notte)
-  accent: '#F9A8D4',          // Rosa dolce per il pulsante pulisci (modalità notte)
-  accent2: '#93C5FD',        // Azzurro soft per il pulsante "sblocca tutto" (modalità notte)
-  counter: '#F5E1E8',        // rosa molto chiaro per il counter parole (anche in modalità notte)
+  primary: '#4A90E2',         // Blu soft per il pulsante genera (modalità notte)
+  title: '#4A90E2',           // Blu soft per il titolo (modalità notte) - stesso colore del pulsante genera
+  secondary: '#7BB3F0',       // Blu chiaro per il pulsante "scrivi la tua storia" (modalità notte)
+  accent: '#5B9BD5',          // Blu medio per il pulsante pulisci (modalità notte)
+  accent2: '#87CEEB',         // Azzurro per il pulsante "sblocca tutto" (modalità notte)
+  counter: '#E6F3FF',         // Blu molto chiaro per il counter parole (modalità notte)
 
   text: '#FFFFFF',            // Testo primario
   textOnButton: '#FFFFFF',    // Testo bianco su bottoni colorati per migliore leggibilità
   textOnSecondary: '#1A2238',
 
-  border: '#3A4A5C',
-  tabActive: '#87CEEB',
-  tabInactive: '#B0C4DE',
+  border: '#4A5C7A',          // Blu-grigio per i bordi
+  tabActive: '#87CEEB',       // Azzurro per tab attiva
+  tabInactive: '#6B7B9A',     // Blu-grigio per tab inattiva
 };
