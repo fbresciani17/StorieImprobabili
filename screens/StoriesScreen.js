@@ -142,12 +142,12 @@ export default function StoriesScreen() {
       style={[
         styles.chip,
         {
-          backgroundColor: active ? (colors.accent || '#ddd') : 'transparent',
+          backgroundColor: active ? (colors.accent2 || '#ddd') : 'transparent',
           borderColor: colors.border,
         },
       ]}
     >
-      <Text style={[styles.chipText, { color: colors.text }]}>{label}</Text>
+      <Text style={[styles.chipText, { color: active ? '#FFFFFF' : colors.text }]}>{label}</Text>
     </Pressable>
   );
 
@@ -166,19 +166,19 @@ export default function StoriesScreen() {
           <View style={styles.actionsRow}>
             <Pressable
               onPress={() => openEditor(item)}
-              style={[styles.iconBtn, { backgroundColor: colors.accent }]}
+              style={[styles.iconBtn, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
               accessibilityLabel="Modifica storia"
             >
-              <Text style={{ color: colors.text, fontWeight: '800' }}>✏️</Text>
+              <Text style={{ color: colors.textOnButton || '#FFFFFF', fontWeight: '800' }}>✏️</Text>
             </Pressable>
             <Pressable
               onPress={() => confirmDelete(item.id)}
-              style={[styles.iconBtn, { backgroundColor: colors.accent2 || colors.accent }]}
+              style={[styles.iconBtn, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
               accessibilityLabel="Elimina storia"
             >
-              <Text style={{ color: colors.text, fontWeight: '800' }}>🗑️</Text>
+              <Text style={{ color: colors.textOnButton || '#FFFFFF', fontWeight: '800' }}>🗑️</Text>
             </Pressable>
           </View>
         </View>
@@ -371,17 +371,17 @@ export default function StoriesScreen() {
             <View style={styles.modalActions}>
               <Pressable onPress={copyStory} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
                 <Text style={[styles.modalBtnText, { color: colors.textOnButton || '#FFFFFF' }]}>
-                  Copia racconto 📋
+                  Copia 📋
                 </Text>
               </Pressable>
-              <Pressable onPress={() => openEditor(preview)} style={[styles.modalBtn, { backgroundColor: colors.accent }]}>
-                <Text style={[styles.modalBtnText, { color: colors.text }]}>Modifica ✏️</Text>
+              <Pressable onPress={() => openEditor(preview)} style={[styles.modalBtn, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.modalBtnText, { color: colors.textOnButton || '#FFFFFF' }]}>Modifica ✏️</Text>
               </Pressable>
               <Pressable
                 onPress={() => confirmDelete(preview.id)}
-                style={[styles.modalBtnGhost, { borderColor: colors.border }]}
+                style={[styles.modalBtnGhost, { backgroundColor: colors.accent, borderColor: colors.accent }]}
               >
-                <Text style={[styles.modalBtnGhostText, { color: colors.text }]}>Elimina 🗑️</Text>
+                <Text style={[styles.modalBtnGhostText, { color: colors.textOnButton || '#FFFFFF' }]}>Elimina 🗑️</Text>
               </Pressable>
             </View>
           </View>
@@ -459,8 +459,28 @@ const styles = StyleSheet.create({
   modalMeta: { fontSize: ts(12), opacity: 0.8, marginTop: 2 },
   modalBody: { fontSize: ts(15), lineHeight: 22, marginTop: 8 },
   modalActions: { flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginTop: 12 },
-  modalBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
+  modalBtn: { 
+    flex: 1, 
+    alignItems: 'center', 
+    paddingVertical: 12, 
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   modalBtnText: { fontSize: ts(14), fontWeight: '800' },
-  modalBtnGhost: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1 },
+  modalBtnGhost: { 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    borderRadius: 12, 
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   modalBtnGhostText: { fontSize: ts(14), fontWeight: '700' },
 });

@@ -117,7 +117,7 @@ export default function GeneratorScreen({ navigation }) {
           onPress={() => toggleLock(key)}
           style={[
             styles.lockBtn,
-            { backgroundColor: locked ? colors.primary : colors.accent }
+            { backgroundColor: locked ? colors.accent : colors.primary }
           ]}
         >
           <Ionicons

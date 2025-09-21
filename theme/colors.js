@@ -12,7 +12,7 @@ export const lightColors = {
   counter: '#F5E1E8',        // rosa molto chiaro per il counter parole
 
   text: '#1F2937',           // grigio-blu profondo (ottima leggibilità)
-  textOnButton: '#1F2937',   // testo scuro su bottoni gialli per migliore leggibilità
+  textOnButton: '#FFFFFF',   // testo bianco su bottoni colorati per migliore leggibilità
   textOnSecondary: '#0F172A',// testo su bottoni secondari (su azzurro chiaro)
 
   border: '#D7E3F4',         // bordi delicati coerenti con la palette
@@ -33,7 +33,7 @@ export const darkColors = {
   counter: '#F5E1E8',        // rosa molto chiaro per il counter parole (anche in modalità notte)
 
   text: '#FFFFFF',            // Testo primario
-  textOnButton: '#1A2238',    // Testo scuro su bottoni gialli per migliore leggibilità
+  textOnButton: '#FFFFFF',    // Testo bianco su bottoni colorati per migliore leggibilità
   textOnSecondary: '#1A2238',
 
   border: '#3B4A7A',

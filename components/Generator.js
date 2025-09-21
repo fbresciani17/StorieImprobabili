@@ -118,7 +118,7 @@ export default function Generator({ onGoToEditor }) {
               <Pressable
                 onPress={() => toggleLock(key)}
                 accessibilityRole="button"
-                style={[styles.lockBtn, { backgroundColor: locks[key] ? colors.primary : colors.accent, borderColor: colors.border }]}
+                style={[styles.lockBtn, { backgroundColor: locks[key] ? colors.accent : colors.primary, borderColor: colors.border }]}
               >
                 <Ionicons name={locks[key] ? 'lock-closed' : 'lock-open'} size={18} color={colors.text} />
               </Pressable>
